@@ -20,6 +20,8 @@ http://127.0.0.1:4173/index.html
 - Relationship Vault
 - Shop by Emotion
 - Ready Hampers
+- Owner hamper editor with publish, stock, price, and delete controls
+- Customer cart with quantities, total, and checkout-style order flow
 - Build Your Own Hamper
 - Wellness Subscription
 - Corporate portal and rewards sections
