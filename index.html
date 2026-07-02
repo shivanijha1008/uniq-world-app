@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7ebe1" />
+    <title>Uniq World</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell" aria-label="Uniq World mobile app">
+      <section class="phone">
+        <header class="topbar">
+          <button class="icon-button" data-action="profile" aria-label="Open profile">
+            <i data-lucide="user-round"></i>
+          </button>
+          <div class="brand">
+            <span>Uniq World</span>
+            <small>Every Gift Tells Your Story</small>
+          </div>
+          <button class="icon-button" data-action="calendar" aria-label="Open gift calendar">
+            <i data-lucide="calendar-heart"></i>
+          </button>
+        </header>
+
+        <section class="screen active" data-screen="home">
+          <div class="hero">
+            <div>
+              <p class="eyebrow">AI gifting companion</p>
+              <h1>Thoughtful gifts, built around real relationships.</h1>
+              <p>Tell the concierge who it is for. Uniq World remembers the details, styles the hamper, and keeps your calendar warm.</p>
+              <button class="primary-button" data-nav="concierge">
+                <i data-lucide="sparkles"></i>
+                Ask AI Concierge
+              </button>
+            </div>
+            <div class="hero-visual" aria-label="Luxury hamper preview">
+              <div class="box-lid"></div>
+              <div class="gift-box">
+                <span class="item candle"></span>
+                <span class="item bottle"></span>
+                <span class="item card"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="quick-grid">
+            <button data-nav="discover"><i data-lucide="heart"></i><span>Shop by Emotion</span></button>
+            <button data-nav="builder"><i data-lucide="package-plus"></i><span>Build Hamper</span></button>
+            <button data-nav="subscription"><i data-lucide="leaf"></i><span>Wellness Box</span></button>
+            <button data-nav="profile"><i data-lucide="briefcase-business"></i><span>Corporate</span></button>
+          </div>
+
+          <section class="panel">
+            <div class="section-title">
+              <h2>AI recommended</h2>
+              <button data-nav="concierge">Refresh</button>
+            </div>
+            <div class="horizontal-list" id="recommendations"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <h2>Upcoming occasions</h2>
+              <button data-action="calendar">Sync</button>
+            </div>
+            <div class="occasion-list" id="occasionList"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <h2>Limited edition</h2>
+              <button data-nav="hampers">View all</button>
+            </div>
+            <article class="feature-card">
+              <div>
+                <p class="eyebrow">Moonlit self-care</p>
+                <h3>Quarterly ritual box</h3>
+                <p>Tea, skin care, journaling tools, and a QR memory letter.</p>
+              </div>
+              <button class="icon-button" data-nav="subscription" aria-label="Open subscription">
+                <i data-lucide="arrow-up-right"></i>
+              </button>
+            </article>
+          </section>
+        </section>
+
+        <section class="screen" data-screen="discover">
+          <div class="page-head">
+            <p class="eyebrow">Emotion-first shopping</p>
+            <h1>Start with the feeling.</h1>
+          </div>
+          <div class="emotion-grid" id="emotionGrid"></div>
+          <section class="panel">
+            <div class="section-title">
+              <h2>Mood board</h2>
+              <button data-action="shuffleMood">Shuffle</button>
+            </div>
+            <div class="mood-board" id="moodBoard"></div>
+          </section>
+        </section>
+
+        <section class="screen" data-screen="hampers">
+          <div class="page-head">
+            <p class="eyebrow">Ready hampers</p>
+            <h1>Curated collections with a story.</h1>
+          </div>
+          <div class="filter-row" id="hamperFilters"></div>
+          <div class="hamper-list" id="hamperList"></div>
+        </section>
+
+        <section class="screen" data-screen="builder">
+          <div class="page-head">
+            <p class="eyebrow">Build your own</p>
+            <h1>Design the hamper live.</h1>
+          </div>
+          <section class="builder-card">
+            <div class="builder-preview">
+              <div class="preview-box" id="previewBox">
+                <span class="preview-item one"></span>
+                <span class="preview-item two"></span>
+                <span class="preview-item three"></span>
+              </div>
+              <div>
+                <p class="eyebrow">Harmony score</p>
+                <strong id="harmonyScore">92%</strong>
+              </div>
+            </div>
+            <label>
+              Budget
+              <input type="range" min="1200" max="10000" step="200" value="3200" id="budgetRange" />
+              <span id="budgetValue">Rs 3,200</span>
+            </label>
+            <div class="segmented" id="boxOptions"></div>
+            <div class="product-chips" id="productChips"></div>
+          </section>
+        </section>
+
+        <section class="screen" data-screen="subscription">
+          <div class="page-head">
+            <p class="eyebrow">Quarterly evolution</p>
+            <h1>Your wellness box gets smarter.</h1>
+          </div>
+          <section class="wellness-card">
+            <div class="orbital">
+              <span></span><span></span><span></span>
+            </div>
+            <div>
+              <h2>AI Wellness Profile</h2>
+              <p>Skin, hair, fragrance, stress, sleep, tea, allergies, goals, and seasonal preferences evolve after every rating.</p>
+            </div>
+          </section>
+          <div class="rating-list" id="ratingList"></div>
+          <section class="panel">
+            <div class="section-title">
+              <h2>Monthly challenges</h2>
+              <button>Join</button>
+            </div>
+            <div class="challenge-row">
+              <span>Hydration</span>
+              <span>Self-care Sunday</span>
+              <span>Reading Month</span>
+            </div>
+          </section>
+        </section>
+
+        <section class="screen" data-screen="concierge">
+          <div class="page-head">
+            <p class="eyebrow">AI Gift Concierge</p>
+            <h1>Describe the person. We’ll build the gift.</h1>
+          </div>
+          <div class="chat" id="chatLog"></div>
+          <form class="composer" id="conciergeForm">
+            <input id="conciergeInput" autocomplete="off" placeholder="Buying for my girlfriend, budget Rs 3000..." />
+            <button class="icon-button" aria-label="Send message">
+              <i data-lucide="send-horizontal"></i>
+            </button>
+          </form>
+        </section>
+
+        <section class="screen" data-screen="profile">
+          <div class="page-head">
+            <p class="eyebrow">Relationship Vault</p>
+            <h1>Never forget what matters.</h1>
+          </div>
+          <div class="vault-list" id="vaultList"></div>
+          <section class="panel">
+            <div class="section-title">
+              <h2>Corporate portal</h2>
+              <button>Upload CSV</button>
+            </div>
+            <div class="admin-grid">
+              <span>GST billing</span>
+              <span>Bulk upload</span>
+              <span>Approval flows</span>
+              <span>Branded kits</span>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="section-title">
+              <h2>Uniq Rewards</h2>
+              <button>Redeem</button>
+            </div>
+            <div class="progress"><span style="width: 68%"></span></div>
+            <p class="muted">6,840 points earned from purchases, reviews, referrals, and unboxing posts.</p>
+          </section>
+        </section>
+
+        <nav class="tabbar" aria-label="Primary navigation">
+          <button class="active" data-nav="home"><i data-lucide="house"></i><span>Home</span></button>
+          <button data-nav="discover"><i data-lucide="compass"></i><span>Discover</span></button>
+          <button data-nav="hampers"><i data-lucide="gift"></i><span>Hampers</span></button>
+          <button data-nav="builder"><i data-lucide="boxes"></i><span>Build</span></button>
+          <button data-nav="concierge"><i data-lucide="bot"></i><span>AI</span></button>
+          <button data-nav="profile"><i data-lucide="user-round"></i><span>Profile</span></button>
+        </nav>
+      </section>
+    </main>
+    <script src="./assets/lucide.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

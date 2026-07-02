@@ -1,0 +1,9 @@
+{
+  "name": "Uniq World",
+  "short_name": "Uniq",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fffaf6",
+  "theme_color": "#f7ebe1",
+  "description": "AI-powered personalized gifting and lifestyle platform."
+}
