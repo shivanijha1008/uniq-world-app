@@ -5,13 +5,21 @@ Premium mobile-first prototype for Uniq World, an AI-powered personalized giftin
 ## Run locally
 
 ```bash
-python -m http.server 4173
+npm start
 ```
 
 Then open:
 
 ```text
 http://127.0.0.1:4173/index.html
+```
+
+The app also still opens as a static prototype, but full-stack persistence requires `npm start`.
+
+Optional:
+
+```bash
+set PORT=4180 && npm start
 ```
 
 ## Features
@@ -33,6 +41,8 @@ http://127.0.0.1:4173/index.html
 - Wellness Subscription
 - Corporate portal and rewards sections
 - Static PWA manifest
+- Node.js backend with JSON persistence
+- API routes for app state, admin login, and orders
 
 ## Prototype admin access
 

@@ -1,0 +1,18 @@
+{
+  "name": "uniq-world-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-stack mobile-first Uniq World gifting app prototype.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "gifting",
+    "mobile",
+    "full-stack",
+    "pwa"
+  ],
+  "license": "UNLICENSED"
+}

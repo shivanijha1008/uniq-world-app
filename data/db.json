@@ -1,0 +1,59 @@
+{
+  "hampers": [
+    {
+      "id": "midnight-bloom",
+      "title": "Midnight Bloom",
+      "copy": "Velvet box, fragrance, candle, and truffles.",
+      "price": 5200,
+      "stock": 8,
+      "category": "Luxury",
+      "published": true,
+      "image": ""
+    }
+  ],
+  "inventory": [
+    {
+      "id": "belgian-chocolate",
+      "name": "Belgian Chocolate Box",
+      "description": "Assorted premium chocolates for celebration hampers.",
+      "category": "Chocolate",
+      "price": 650,
+      "stock": 20,
+      "published": true,
+      "image": "",
+      "variants": [
+        { "name": "Classic", "price": 650, "stock": 10 },
+        { "name": "Premium", "price": 850, "stock": 10 }
+      ]
+    },
+    {
+      "id": "jasmine-candle",
+      "name": "Jasmine Soy Candle",
+      "description": "Warm floral candle with reusable glass jar.",
+      "category": "Candle",
+      "price": 850,
+      "stock": 18,
+      "published": true,
+      "image": "",
+      "variants": [
+        { "name": "Mini", "price": 450, "stock": 8 },
+        { "name": "Large", "price": 850, "stock": 10 }
+      ]
+    },
+    {
+      "id": "green-tea-tin",
+      "name": "Green Tea Tin",
+      "description": "Calming loose-leaf tea in a keepsake tin.",
+      "category": "Tea",
+      "price": 520,
+      "stock": 18,
+      "published": true,
+      "image": "",
+      "variants": [
+        { "name": "100g", "price": 520, "stock": 18 }
+      ]
+    }
+  ],
+  "cart": [],
+  "orders": []
+}
