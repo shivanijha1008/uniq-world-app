@@ -613,6 +613,33 @@ button { cursor: pointer; border: 0; }
   gap: 10px;
   margin-bottom: 14px;
 }
+.inventory-category {
+  display: grid;
+  gap: 8px;
+}
+.inventory-category h3 {
+  margin: 6px 2px 0;
+  font-size: 15px;
+  color: var(--plum);
+}
+.inventory-category-list {
+  display: grid;
+  gap: 10px;
+}
+.shipping-banner {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #fff0b8, #ffe3f1);
+  border: 1px solid var(--line);
+  color: var(--plum);
+  font-weight: 900;
+  text-align: center;
+}
+.shipping-banner.success {
+  background: linear-gradient(135deg, #d9ffe9, #fff8d6);
+  color: #087f5b;
+}
 .inventory-pick {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

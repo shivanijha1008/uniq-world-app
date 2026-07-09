@@ -192,6 +192,10 @@ function comboTotals(ids = selectedInventoryIds) {
   return { items, individual, combo, saving: individual - combo };
 }
 
+function selectedUniqueItemCount(items = comboTotals().items) {
+  return new Set(items.map(choice => choice.item.id)).size;
+}
+
 function normalizeCart(lines) {
   return lines.map(line => {
     if (line.cartId && line.type && typeof line.price === "number") return line;
@@ -320,36 +324,58 @@ function renderBuilder() {
   qs("#individualPrice").textContent = money(totals.individual);
   qs("#comboPrice").textContent = money(totals.combo);
   qs("#comboSaving").textContent = money(totals.saving);
+  const uniqueCount = selectedUniqueItemCount(totals.items);
+  qs("#shippingBanner").textContent = uniqueCount < 3
+    ? `Add at least ${3 - uniqueCount} more item${3 - uniqueCount === 1 ? "" : "s"} to build your own hamper.`
+    : totals.combo >= 3000
+      ? "Free shipping unlocked over Rs 3,000."
+      : `${money(3000 - totals.combo)} more to unlock free shipping.`;
+  qs("#shippingBanner").classList.toggle("success", uniqueCount >= 3 && totals.combo >= 3000);
 
   const variantChoices = choices.flatMap(item => itemVariants(item).map((variant, index) => ({ item, variant, key: variantKey(item.id, index) })))
     .filter(choice => choice.variant.stock > 0 && choice.variant.price <= maxBudget);
 
-  qs("#inventoryPicker").innerHTML = variantChoices.map(choice => {
-    const selected = selectedEntry(choice.key);
-    return `
-      <article class="inventory-pick ${selected ? "active" : ""}">
-        <button class="inventory-choice" data-action="toggleInventoryPick" data-id="${choice.key}" type="button">
-          ${productArt(choice.item.image, choice.item.name)}
-          <span>
-            <strong>${escapeHtml(choice.item.name)} - ${escapeHtml(choice.variant.name)}</strong>
-            <small>${escapeHtml(choice.item.category)} | ${money(choice.variant.price)} each | ${choice.variant.stock} available</small>
-          </span>
-        </button>
-        ${selected ? `
-          <div class="variant-qty">
-            <button data-action="builderQtyDown" data-id="${choice.key}" type="button">-</button>
-            <span>${selected.qty}</span>
-            <button data-action="builderQtyUp" data-id="${choice.key}" type="button">+</button>
-          </div>
-        ` : ""}
-      </article>
-    `;
-  }).join("") || `<section class="empty-state">No inventory variants are available in this price range.</section>`;
+  const groupedChoices = variantChoices.reduce((groups, choice) => {
+    groups[choice.item.category] ||= [];
+    groups[choice.item.category].push(choice);
+    return groups;
+  }, {});
+
+  qs("#inventoryPicker").innerHTML = Object.entries(groupedChoices).map(([category, categoryChoices]) => `
+    <section class="inventory-category">
+      <h3>${escapeHtml(category)}</h3>
+      <div class="inventory-category-list">
+        ${categoryChoices.map(choice => {
+          const selected = selectedEntry(choice.key);
+          return `
+            <article class="inventory-pick ${selected ? "active" : ""}">
+              <button class="inventory-choice" data-action="toggleInventoryPick" data-id="${choice.key}" type="button">
+                ${productArt(choice.item.image, choice.item.name)}
+                <span>
+                  <strong>${escapeHtml(choice.item.name)} - ${escapeHtml(choice.variant.name)}</strong>
+                  <small>${money(choice.variant.price)} each | ${choice.variant.stock} available</small>
+                </span>
+              </button>
+              ${selected ? `
+                <div class="variant-qty">
+                  <button data-action="builderQtyDown" data-id="${choice.key}" type="button">-</button>
+                  <span>${selected.qty}</span>
+                  <button data-action="builderQtyUp" data-id="${choice.key}" type="button">+</button>
+                </div>
+              ` : ""}
+            </article>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `).join("") || `<section class="empty-state">No inventory variants are available in this price range.</section>`;
 
   const comboButton = qs("[data-action='addCombo']");
-  comboButton.disabled = selectedInventoryIds.length === 0 || overBudget;
+  comboButton.disabled = selectedInventoryIds.length === 0 || overBudget || uniqueCount < 3;
   comboButton.innerHTML = overBudget
     ? `<i data-lucide="circle-alert"></i>Combo exceeds budget`
+    : uniqueCount < 3
+      ? `<i data-lucide="circle-alert"></i>Select at least 3 items`
     : `<i data-lucide="package-plus"></i>Add combo to cart`;
   lucide.createIcons();
 }
@@ -494,6 +520,7 @@ function addComboToCart() {
   const totals = comboTotals();
   const maxBudget = Number(qs("#budgetRange").value);
   if (!totals.items.length) return showToast("Select inventory products first.");
+  if (selectedUniqueItemCount(totals.items) < 3) return showToast("Add at least 3 different items to build your own hamper.");
   if (totals.combo > maxBudget) return showToast("Combo is above the selected budget.");
   const minStock = Math.min(...totals.items.map(choice => Math.floor(choice.variant.stock / choice.qty)));
   if (minStock < 1) return showToast("One selected item is out of stock.");
