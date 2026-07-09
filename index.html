@@ -48,9 +48,9 @@
 
           <div class="quick-grid">
             <button data-nav="discover"><i data-lucide="heart"></i><span>Shop by Emotion</span></button>
-            <button data-nav="builder"><i data-lucide="package-plus"></i><span>Build Hamper</span></button>
             <button data-nav="subscription"><i data-lucide="leaf"></i><span>Wellness Box</span></button>
-            <button data-nav="profile"><i data-lucide="briefcase-business"></i><span>Corporate</span></button>
+            <button data-nav="builder"><i data-lucide="party-popper"></i><span>Create Combo</span></button>
+            <button data-nav="admin"><i data-lucide="shield-check"></i><span>Admin Login</span></button>
           </div>
 
           <section class="panel">
@@ -107,10 +107,52 @@
             <p class="eyebrow">Ready hampers</p>
             <h1>Curated collections with a story.</h1>
           </div>
+          <div class="filter-row" id="hamperFilters"></div>
+          <div class="hamper-list" id="hamperList"></div>
+        </section>
+
+        <section class="screen" data-screen="builder">
+          <div class="page-head">
+            <p class="eyebrow">Build your own</p>
+            <h1>Pick from inventory and save 10%.</h1>
+          </div>
+          <section class="builder-card">
+            <div class="builder-summary">
+              <div>
+                <p class="eyebrow">Price range</p>
+                <strong id="builderRangeText">Rs 1,500 - Rs 5,000</strong>
+              </div>
+              <div>
+                <p class="eyebrow">Combo price</p>
+                <strong id="comboPrice">Rs 0</strong>
+              </div>
+            </div>
+            <label>
+              Maximum budget
+              <input type="range" min="1000" max="12000" step="500" value="5000" id="budgetRange" />
+              <span id="budgetValue">Rs 5,000</span>
+            </label>
+            <div class="builder-prices">
+              <span>Individual total: <strong id="individualPrice">Rs 0</strong></span>
+              <span>Combo saving: <strong id="comboSaving">Rs 0</strong></span>
+            </div>
+            <div class="inventory-picker" id="inventoryPicker"></div>
+            <button class="primary-button checkout-button" type="button" data-action="addCombo">
+              <i data-lucide="package-plus"></i>
+              Add combo to cart
+            </button>
+          </section>
+        </section>
+
+        <section class="screen" data-screen="admin">
+          <div class="page-head">
+            <p class="eyebrow">Separate admin</p>
+            <h1>Inventory and catalog control.</h1>
+          </div>
           <section class="owner-tools">
             <div>
               <strong>Admin access</strong>
-              <p class="muted" id="adminStatus">Enter password to edit catalog, photos, pricing, and stock.</p>
+              <p class="muted" id="adminStatus">Login to manage inventory, hamper pictures, descriptions, and pricing.</p>
             </div>
             <button class="ghost-button compact" type="button" data-action="adminLogout" id="adminLogout" hidden>Lock</button>
           </section>
@@ -122,79 +164,110 @@
             <button class="primary-button" type="submit"><i data-lucide="lock-keyhole"></i>Unlock admin</button>
             <p class="muted" id="adminMessage"></p>
           </form>
-          <form class="hamper-editor" id="hamperEditor" hidden>
-            <input id="hamperId" type="hidden" />
-            <label>
-              Hamper name
-              <input id="hamperTitle" required maxlength="48" placeholder="Moonlit Bloom" />
-            </label>
-            <label>
-              Description and products
-              <textarea id="hamperCopy" required maxlength="180" placeholder="Velvet box, candle, truffles, QR message..."></textarea>
-            </label>
-            <div class="form-row">
-              <label>
-                Category
-                <select id="hamperCategory">
-                  <option>Luxury</option>
-                  <option>Corporate</option>
-                  <option>Wellness</option>
-                  <option>Eco</option>
-                </select>
-              </label>
-              <label>
-                Price
-                <input id="hamperPrice" required type="number" min="500" step="100" placeholder="3200" />
-              </label>
-              <label>
-                Stock
-                <input id="hamperStock" required type="number" min="0" step="1" placeholder="12" />
-              </label>
-            </div>
-            <label>
-              Hamper picture
-              <input id="hamperImage" type="file" accept="image/*" />
-            </label>
-            <div class="image-preview" id="imagePreview">No picture selected</div>
-            <label class="checkbox-line">
-              <input id="hamperPublished" type="checkbox" checked />
-              Published for customers
-            </label>
-            <div class="editor-actions">
-              <button class="primary-button" type="submit"><i data-lucide="save"></i>Save hamper</button>
-              <button class="ghost-button" type="button" data-action="newHamper">New</button>
-              <button class="ghost-button" type="button" data-action="removeImage">Remove picture</button>
-            </div>
-          </form>
-          <div class="filter-row" id="hamperFilters"></div>
-          <div class="hamper-list" id="hamperList"></div>
-        </section>
+          <div class="admin-workspace" id="adminWorkspace" hidden>
+            <section class="panel">
+              <div class="section-title">
+                <h2>Inventory page</h2>
+                <button data-action="newInventory">New item</button>
+              </div>
+              <form class="hamper-editor" id="inventoryEditor">
+                <input id="inventoryId" type="hidden" />
+                <label>
+                  Product name
+                  <input id="inventoryName" required maxlength="48" placeholder="Belgian Chocolate Box" />
+                </label>
+                <label>
+                  Description
+                  <textarea id="inventoryDescription" required maxlength="160" placeholder="Premium product customers can add to custom hampers"></textarea>
+                </label>
+                <div class="form-row">
+                  <label>
+                    Category
+                    <select id="inventoryCategory">
+                      <option>Chocolate</option>
+                      <option>Candle</option>
+                      <option>Tea</option>
+                      <option>Beauty</option>
+                      <option>Stationery</option>
+                      <option>Lifestyle</option>
+                    </select>
+                  </label>
+                  <label>
+                    Individual price
+                    <input id="inventoryPrice" required type="number" min="50" step="50" placeholder="450" />
+                  </label>
+                  <label>
+                    Stock
+                    <input id="inventoryStock" required type="number" min="0" step="1" placeholder="25" />
+                  </label>
+                </div>
+                <label>
+                  Product picture
+                  <input id="inventoryImage" type="file" accept="image/*" />
+                </label>
+                <div class="image-preview" id="inventoryImagePreview">No picture selected</div>
+                <label class="checkbox-line">
+                  <input id="inventoryPublished" type="checkbox" checked />
+                  Available for custom hamper builder
+                </label>
+                <div class="editor-actions">
+                  <button class="primary-button" type="submit"><i data-lucide="save"></i>Save inventory</button>
+                  <button class="ghost-button" type="button" data-action="removeInventoryImage">Remove picture</button>
+                </div>
+              </form>
+              <div class="inventory-admin-list" id="inventoryAdminList"></div>
+            </section>
 
-        <section class="screen" data-screen="builder">
-          <div class="page-head">
-            <p class="eyebrow">Build your own</p>
-            <h1>Design the hamper live.</h1>
+            <section class="panel">
+              <div class="section-title">
+                <h2>Ready hamper catalog</h2>
+                <button data-action="newHamper">New hamper</button>
+              </div>
+              <form class="hamper-editor" id="hamperEditor">
+                <input id="hamperId" type="hidden" />
+                <label>
+                  Hamper name
+                  <input id="hamperTitle" required maxlength="48" placeholder="Moonlit Bloom" />
+                </label>
+                <label>
+                  Description and products
+                  <textarea id="hamperCopy" required maxlength="180" placeholder="Velvet box, candle, truffles, QR message..."></textarea>
+                </label>
+                <div class="form-row">
+                  <label>
+                    Category
+                    <select id="hamperCategory">
+                      <option>Luxury</option>
+                      <option>Corporate</option>
+                      <option>Wellness</option>
+                      <option>Eco</option>
+                    </select>
+                  </label>
+                  <label>
+                    Price
+                    <input id="hamperPrice" required type="number" min="500" step="100" placeholder="3200" />
+                  </label>
+                  <label>
+                    Stock
+                    <input id="hamperStock" required type="number" min="0" step="1" placeholder="12" />
+                  </label>
+                </div>
+                <label>
+                  Hamper picture
+                  <input id="hamperImage" type="file" accept="image/*" />
+                </label>
+                <div class="image-preview" id="imagePreview">No picture selected</div>
+                <label class="checkbox-line">
+                  <input id="hamperPublished" type="checkbox" checked />
+                  Published for customers
+                </label>
+                <div class="editor-actions">
+                  <button class="primary-button" type="submit"><i data-lucide="save"></i>Save hamper</button>
+                  <button class="ghost-button" type="button" data-action="removeImage">Remove picture</button>
+                </div>
+              </form>
+            </section>
           </div>
-          <section class="builder-card">
-            <div class="builder-preview">
-              <div class="preview-box" id="previewBox">
-                <span class="preview-item one"></span>
-                <span class="preview-item two"></span>
-                <span class="preview-item three"></span>
-              </div>
-              <div>
-                <p class="eyebrow">Harmony score</p>
-                <strong id="harmonyScore">92%</strong>
-              </div>
-            </div>
-            <label>
-              Budget
-              <input type="range" min="1200" max="10000" step="200" value="3200" id="budgetRange" />
-              <span id="budgetValue">Rs 3,200</span>
-            </label>
-            <div class="segmented" id="boxOptions"></div>
-            <div class="product-chips" id="productChips"></div>
-          </section>
         </section>
 
         <section class="screen" data-screen="subscription">
@@ -273,7 +346,7 @@
           <button data-nav="hampers"><i data-lucide="gift"></i><span>Hampers</span></button>
           <button data-nav="builder"><i data-lucide="boxes"></i><span>Build</span></button>
           <button data-nav="concierge"><i data-lucide="bot"></i><span>AI</span></button>
-          <button data-nav="profile"><i data-lucide="user-round"></i><span>Profile</span></button>
+          <button data-nav="admin"><i data-lucide="shield-check"></i><span>Admin</span></button>
         </nav>
 
         <aside class="cart-drawer" id="cartDrawer" aria-label="Shopping cart" aria-hidden="true">

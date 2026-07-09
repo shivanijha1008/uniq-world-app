@@ -23,6 +23,9 @@ http://127.0.0.1:4173/index.html
 - Owner hamper editor with publish, stock, price, and delete controls
 - Admin password gate for catalog editing
 - Hamper picture upload with local preview/storage
+- Separate admin section with inventory management
+- Build-your-own hamper from live inventory
+- Combo pricing at 10% less than individual item total
 - Customer cart with quantities, total, and checkout-style order flow
 - Build Your Own Hamper
 - Wellness Subscription
