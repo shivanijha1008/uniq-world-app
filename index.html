@@ -109,14 +109,19 @@
           </div>
           <section class="owner-tools">
             <div>
-              <strong>Owner controls</strong>
-              <p class="muted">Edit hamper catalog and publish customer-ready gifts.</p>
+              <strong>Admin access</strong>
+              <p class="muted" id="adminStatus">Enter password to edit catalog, photos, pricing, and stock.</p>
             </div>
-            <label class="switch">
-              <input type="checkbox" id="ownerMode" />
-              <span></span>
-            </label>
+            <button class="ghost-button compact" type="button" data-action="adminLogout" id="adminLogout" hidden>Lock</button>
           </section>
+          <form class="admin-login" id="adminLogin">
+            <label>
+              Admin password
+              <input id="adminPassword" type="password" autocomplete="current-password" placeholder="Enter admin password" />
+            </label>
+            <button class="primary-button" type="submit"><i data-lucide="lock-keyhole"></i>Unlock admin</button>
+            <p class="muted" id="adminMessage"></p>
+          </form>
           <form class="hamper-editor" id="hamperEditor" hidden>
             <input id="hamperId" type="hidden" />
             <label>
@@ -124,10 +129,19 @@
               <input id="hamperTitle" required maxlength="48" placeholder="Moonlit Bloom" />
             </label>
             <label>
-              Story and products
-              <textarea id="hamperCopy" required maxlength="150" placeholder="Velvet box, candle, truffles, QR message..."></textarea>
+              Description and products
+              <textarea id="hamperCopy" required maxlength="180" placeholder="Velvet box, candle, truffles, QR message..."></textarea>
             </label>
             <div class="form-row">
+              <label>
+                Category
+                <select id="hamperCategory">
+                  <option>Luxury</option>
+                  <option>Corporate</option>
+                  <option>Wellness</option>
+                  <option>Eco</option>
+                </select>
+              </label>
               <label>
                 Price
                 <input id="hamperPrice" required type="number" min="500" step="100" placeholder="3200" />
@@ -137,6 +151,11 @@
                 <input id="hamperStock" required type="number" min="0" step="1" placeholder="12" />
               </label>
             </div>
+            <label>
+              Hamper picture
+              <input id="hamperImage" type="file" accept="image/*" />
+            </label>
+            <div class="image-preview" id="imagePreview">No picture selected</div>
             <label class="checkbox-line">
               <input id="hamperPublished" type="checkbox" checked />
               Published for customers
@@ -144,6 +163,7 @@
             <div class="editor-actions">
               <button class="primary-button" type="submit"><i data-lucide="save"></i>Save hamper</button>
               <button class="ghost-button" type="button" data-action="newHamper">New</button>
+              <button class="ghost-button" type="button" data-action="removeImage">Remove picture</button>
             </div>
           </form>
           <div class="filter-row" id="hamperFilters"></div>
@@ -195,7 +215,7 @@
           <section class="panel">
             <div class="section-title">
               <h2>Monthly challenges</h2>
-              <button>Join</button>
+              <button data-action="joinChallenge">Join</button>
             </div>
             <div class="challenge-row">
               <span>Hydration</span>
@@ -228,7 +248,7 @@
           <section class="panel">
             <div class="section-title">
               <h2>Corporate portal</h2>
-              <button>Upload CSV</button>
+              <button data-action="corporateUpload">Upload CSV</button>
             </div>
             <div class="admin-grid">
               <span>GST billing</span>
@@ -240,7 +260,7 @@
           <section class="panel">
             <div class="section-title">
               <h2>Uniq Rewards</h2>
-              <button>Redeem</button>
+              <button data-action="redeemRewards">Redeem</button>
             </div>
             <div class="progress"><span style="width: 68%"></span></div>
             <p class="muted">6,840 points earned from purchases, reviews, referrals, and unboxing posts.</p>
@@ -274,6 +294,7 @@
             <p class="muted" id="checkoutMessage"></p>
           </div>
         </aside>
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
       </section>
     </main>
     <script src="./assets/lucide.min.js"></script>

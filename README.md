@@ -21,8 +21,18 @@ http://127.0.0.1:4173/index.html
 - Shop by Emotion
 - Ready Hampers
 - Owner hamper editor with publish, stock, price, and delete controls
+- Admin password gate for catalog editing
+- Hamper picture upload with local preview/storage
 - Customer cart with quantities, total, and checkout-style order flow
 - Build Your Own Hamper
 - Wellness Subscription
 - Corporate portal and rewards sections
 - Static PWA manifest
+
+## Prototype admin access
+
+Use this local prototype password to unlock catalog editing:
+
+```text
+uniqadmin
+```

@@ -44,18 +44,20 @@ const moods = [
 ];
 
 const defaultHampers = [
-  { id: "midnight-bloom", title: "Midnight Bloom", copy: "360 preview, velvet box, fragrance, candle, truffles.", price: 5200, stock: 8, category: "Luxury", published: true },
-  { id: "apology-edit", title: "The Apology Edit", copy: "Soft florals, secret letter, tea, and calming bath ritual.", price: 3400, stock: 11, category: "Wellness", published: true },
-  { id: "executive-onboarding", title: "Executive Onboarding", copy: "Branded magnetic box with notebook, coffee, and desk objects.", price: 4800, stock: 20, category: "Corporate", published: true },
-  { id: "self-care-sunday", title: "Self-care Sunday", copy: "Skin, bath, tea, book, and mindfulness challenge.", price: 2900, stock: 6, category: "Wellness", published: true }
+  { id: "midnight-bloom", title: "Midnight Bloom", copy: "360 preview, velvet box, fragrance, candle, truffles.", price: 5200, stock: 8, category: "Luxury", published: true, image: "" },
+  { id: "apology-edit", title: "The Apology Edit", copy: "Soft florals, secret letter, tea, and calming bath ritual.", price: 3400, stock: 11, category: "Wellness", published: true, image: "" },
+  { id: "executive-onboarding", title: "Executive Onboarding", copy: "Branded magnetic box with notebook, coffee, and desk objects.", price: 4800, stock: 20, category: "Corporate", published: true, image: "" },
+  { id: "self-care-sunday", title: "Self-care Sunday", copy: "Skin, bath, tea, book, and mindfulness challenge.", price: 2900, stock: 6, category: "Wellness", published: true, image: "" }
 ];
 
+const ADMIN_PASSWORD = "uniqadmin";
 let activeScreen = "home";
 let activeFilter = "All";
 let moodIndex = 0;
-let ownerMode = false;
+let adminUnlocked = sessionStorage.getItem("uniqAdminUnlocked") === "true";
 let hampers = loadState("uniqHampers", defaultHampers);
 let cart = loadState("uniqCart", []);
+let draftImage = "";
 
 function qs(selector, root = document) {
   return root.querySelector(selector);
@@ -79,6 +81,12 @@ function saveState(key, value) {
 
 function money(value) {
   return `Rs ${Number(value).toLocaleString("en-IN")}`;
+}
+
+function productArt(image = "", label = "Hamper image") {
+  const safeLabel = escapeHtml(label);
+  if (!image) return `<div class="product-art" aria-label="${safeLabel}"></div>`;
+  return `<div class="product-art has-image" aria-label="${safeLabel}" style="background-image: url('${image}')"></div>`;
 }
 
 function escapeHtml(value) {
@@ -108,7 +116,7 @@ function render() {
 function renderHome() {
   qs("#recommendations").innerHTML = defaultRecommendations.map(item => `
     <article class="product-card">
-      <div class="product-art"></div>
+      ${productArt("", item.title)}
       <h3>${item.title}</h3>
       <p>${item.copy}</p>
       <span class="price">${money(item.price)}</span>
@@ -139,14 +147,18 @@ function renderDiscover() {
 }
 
 function renderHampers() {
-  qs("#ownerMode").checked = ownerMode;
-  qs("#hamperEditor").hidden = !ownerMode;
+  qs("#adminLogin").hidden = adminUnlocked;
+  qs("#hamperEditor").hidden = !adminUnlocked;
+  qs("#adminLogout").hidden = !adminUnlocked;
+  qs("#adminStatus").textContent = adminUnlocked
+    ? "Admin unlocked. You can edit catalog, photos, pricing, stock, and publish status."
+    : "Enter password to edit catalog, photos, pricing, and stock.";
   qs("#hamperFilters").innerHTML = filters.map(filter => `
     <button class="${filter === activeFilter ? "active" : ""}" data-filter="${filter}">${filter}</button>
   `).join("");
 
   const visibleHampers = hampers.filter(hamper => {
-    if (!ownerMode && (!hamper.published || hamper.stock < 1)) return false;
+    if (!adminUnlocked && (!hamper.published || hamper.stock < 1)) return false;
     if (activeFilter === "All") return true;
     if (activeFilter === "Published") return hamper.published;
     return hamper.category === activeFilter;
@@ -157,7 +169,7 @@ function renderHampers() {
     const status = hamper.published ? "Published" : "Draft";
     return `
       <article class="hamper-card ${!hamper.published ? "draft" : ""}">
-        <div class="product-art"></div>
+        ${productArt(hamper.image, hamper.title)}
         <div>
           <div class="hamper-heading">
             <h3>${escapeHtml(hamper.title)}</h3>
@@ -172,7 +184,7 @@ function renderHampers() {
             <button class="primary-mini" data-action="addCart" data-id="${hamper.id}" ${hamper.stock < 1 || !hamper.published ? "disabled" : ""}>
               <i data-lucide="shopping-bag"></i>${inCart ? `Added (${inCart})` : "Add to cart"}
             </button>
-            ${ownerMode ? `
+            ${adminUnlocked ? `
               <button class="ghost-mini" data-action="editHamper" data-id="${hamper.id}"><i data-lucide="pencil"></i>Edit</button>
               <button class="danger-mini" data-action="deleteHamper" data-id="${hamper.id}"><i data-lucide="trash-2"></i>Delete</button>
             ` : ""}
@@ -326,26 +338,35 @@ function changeCart(id, delta) {
 }
 
 function editHamper(id) {
+  if (!adminUnlocked) return;
   const hamper = hampers.find(item => item.id === id);
   if (!hamper) return;
   qs("#hamperId").value = hamper.id;
   qs("#hamperTitle").value = hamper.title;
   qs("#hamperCopy").value = hamper.copy;
+  qs("#hamperCategory").value = hamper.category || "Luxury";
   qs("#hamperPrice").value = hamper.price;
   qs("#hamperStock").value = hamper.stock;
   qs("#hamperPublished").checked = hamper.published;
+  draftImage = hamper.image || "";
+  renderImagePreview();
   qs("#hamperTitle").focus();
 }
 
 function clearHamperForm() {
   qs("#hamperEditor").reset();
   qs("#hamperId").value = "";
+  qs("#hamperCategory").value = "Luxury";
   qs("#hamperPublished").checked = true;
+  qs("#hamperImage").value = "";
+  draftImage = "";
+  renderImagePreview();
   qs("#hamperTitle").focus();
 }
 
 function saveHamper(event) {
   event.preventDefault();
+  if (!adminUnlocked) return;
   const id = qs("#hamperId").value || `hamper-${Date.now()}`;
   const existing = hampers.find(item => item.id === id);
   const payload = {
@@ -354,8 +375,9 @@ function saveHamper(event) {
     copy: qs("#hamperCopy").value.trim(),
     price: Number(qs("#hamperPrice").value),
     stock: Number(qs("#hamperStock").value),
-    category: existing?.category || "Luxury",
-    published: qs("#hamperPublished").checked
+    category: qs("#hamperCategory").value,
+    published: qs("#hamperPublished").checked,
+    image: draftImage || ""
   };
 
   if (existing) {
@@ -379,6 +401,7 @@ function saveHamper(event) {
 }
 
 function deleteHamper(id) {
+  if (!adminUnlocked) return;
   const hamper = hampers.find(item => item.id === id);
   if (!hamper) return;
   if (!confirm(`Delete ${hamper.title}?`)) return;
@@ -388,6 +411,71 @@ function deleteHamper(id) {
   saveState("uniqCart", cart);
   renderHampers();
   renderCart();
+}
+
+function renderImagePreview() {
+  const preview = qs("#imagePreview");
+  if (!preview) return;
+  if (!draftImage) {
+    preview.classList.remove("has-image");
+    preview.removeAttribute("style");
+    preview.textContent = "No picture selected";
+    return;
+  }
+  preview.classList.add("has-image");
+  preview.style.backgroundImage = `url('${draftImage}')`;
+  preview.textContent = "";
+}
+
+function showToast(message) {
+  const toast = qs("#toast");
+  toast.textContent = message;
+  toast.classList.add("show");
+  clearTimeout(showToast.timer);
+  showToast.timer = setTimeout(() => toast.classList.remove("show"), 2600);
+}
+
+function unlockAdmin(event) {
+  event.preventDefault();
+  const input = qs("#adminPassword");
+  const message = qs("#adminMessage");
+  if (input.value === ADMIN_PASSWORD) {
+    adminUnlocked = true;
+    sessionStorage.setItem("uniqAdminUnlocked", "true");
+    input.value = "";
+    message.textContent = "";
+    renderHampers();
+    clearHamperForm();
+    return;
+  }
+  message.textContent = "Wrong password. Try again.";
+  input.select();
+}
+
+function lockAdmin() {
+  adminUnlocked = false;
+  sessionStorage.removeItem("uniqAdminUnlocked");
+  draftImage = "";
+  renderHampers();
+  renderCart();
+}
+
+function handleImageUpload(event) {
+  if (!adminUnlocked) return;
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    qs("#adminMessage").textContent = "Please upload an image file.";
+    event.target.value = "";
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    draftImage = String(reader.result || "");
+    renderImagePreview();
+  });
+  reader.readAsDataURL(file);
 }
 
 function checkout() {
@@ -430,7 +518,7 @@ function wireStaticEvents() {
     if (action.dataset.action === "profile") navigate("profile");
     if (action.dataset.action === "calendar") {
       navigate("profile");
-      setTimeout(() => alert("Calendar sync mock: Google and Apple reminders are ready for birthdays, festivals, and corporate events."), 100);
+      showToast("Calendar reminders are ready for birthdays, festivals, and corporate events.");
     }
     if (action.dataset.action === "cart") openCart();
     if (action.dataset.action === "closeCart") closeCart();
@@ -440,19 +528,25 @@ function wireStaticEvents() {
     if (action.dataset.action === "editHamper") editHamper(id);
     if (action.dataset.action === "deleteHamper") deleteHamper(id);
     if (action.dataset.action === "newHamper") clearHamperForm();
+    if (action.dataset.action === "removeImage") {
+      draftImage = "";
+      qs("#hamperImage").value = "";
+      renderImagePreview();
+    }
+    if (action.dataset.action === "adminLogout") lockAdmin();
     if (action.dataset.action === "checkout") checkout();
+    if (action.dataset.action === "joinChallenge") showToast("Challenge joined. Points will be added after completion.");
+    if (action.dataset.action === "corporateUpload") showToast("Corporate CSV upload can connect to backend employee rows next.");
+    if (action.dataset.action === "redeemRewards") showToast("Rewards can be applied as a checkout discount next.");
     if (action.dataset.action === "shuffleMood") {
       moodIndex += 1;
       renderMood();
     }
   });
 
-  qs("#ownerMode").addEventListener("change", event => {
-    ownerMode = event.target.checked;
-    renderHampers();
-  });
-
+  qs("#adminLogin").addEventListener("submit", unlockAdmin);
   qs("#hamperEditor").addEventListener("submit", saveHamper);
+  qs("#hamperImage").addEventListener("change", handleImageUpload);
 
   qs("#budgetRange").addEventListener("input", event => {
     qs("#budgetValue").textContent = money(event.target.value);
