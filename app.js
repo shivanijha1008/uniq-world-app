@@ -62,7 +62,11 @@ let activeFilter = "All";
 let moodIndex = 0;
 let adminUnlocked = sessionStorage.getItem("uniqAdminUnlocked") === "true";
 let hampers = loadState("uniqHampers", defaultHampers).map(item => ({ image: "", ...item }));
-let inventory = loadState("uniqInventory", defaultInventory).map(item => ({ image: "", published: true, ...item }));
+let inventory = loadState("uniqInventory", defaultInventory).map(item => {
+  const normalized = { image: "", published: true, ...item };
+  syncItemStock(normalized);
+  return normalized;
+});
 let cart = normalizeCart(loadState("uniqCart", []));
 let draftImage = "";
 let inventoryDraftImage = "";
@@ -108,9 +112,82 @@ function productArt(image = "", label = "Gift image") {
   return `<div class="product-art has-image" aria-label="${safeLabel}" style="background-image: url('${image}')"></div>`;
 }
 
+function itemVariants(item) {
+  const variants = Array.isArray(item.variants) && item.variants.length
+    ? item.variants
+    : [{ name: "Default", price: item.price, stock: item.stock }];
+  return variants.map((variant, index) => ({
+    name: variant.name || `Variant ${index + 1}`,
+    price: Number(variant.price) || Number(item.price) || 0,
+    stock: Number(variant.stock) || 0
+  }));
+}
+
+function variantKey(itemId, variantIndex) {
+  return `${itemId}::${variantIndex}`;
+}
+
+function parseVariantKey(key) {
+  const [itemId, variantIndex = "0"] = String(key).split("::");
+  return { itemId, variantIndex: Number(variantIndex) || 0 };
+}
+
+function getVariantChoice(key) {
+  const { itemId, variantIndex } = parseVariantKey(key);
+  const item = inventory.find(entry => entry.id === itemId);
+  if (!item) return null;
+  const variant = itemVariants(item)[variantIndex];
+  if (!variant) return null;
+  return { item, variant, key, variantIndex };
+}
+
+function selectedEntry(key) {
+  const existing = selectedInventoryIds.find(entry => typeof entry === "object" && entry.key === key);
+  if (existing) return existing;
+  if (selectedInventoryIds.includes(key)) return { key, qty: 1 };
+  return null;
+}
+
+function normalizeSelection() {
+  selectedInventoryIds = selectedInventoryIds.map(entry => {
+    if (typeof entry === "object" && entry.key) return { key: entry.key, qty: Math.max(1, Number(entry.qty) || 1) };
+    return { key: String(entry).includes("::") ? String(entry) : variantKey(entry, 0), qty: 1 };
+  }).filter(entry => getVariantChoice(entry.key));
+}
+
+function syncItemStock(item) {
+  const variants = itemVariants(item);
+  item.variants = variants;
+  item.price = variants[0]?.price || item.price || 0;
+  item.stock = variants.reduce((sum, variant) => sum + variant.stock, 0);
+}
+
+function parseVariants(text, fallbackPrice, fallbackStock) {
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const variants = lines.map((line, index) => {
+    const parts = line.split("|").map(part => part.trim());
+    return {
+      name: parts[0] || `Variant ${index + 1}`,
+      price: Number(parts[1]) || Number(fallbackPrice) || 0,
+      stock: Number(parts[2]) || 0
+    };
+  }).filter(variant => variant.price > 0);
+  if (variants.length) return variants;
+  return [{ name: "Default", price: Number(fallbackPrice) || 0, stock: Number(fallbackStock) || 0 }];
+}
+
+function variantsToText(item) {
+  return itemVariants(item).map(variant => `${variant.name} | ${variant.price} | ${variant.stock}`).join("\n");
+}
+
 function comboTotals(ids = selectedInventoryIds) {
-  const items = ids.map(id => inventory.find(item => item.id === id)).filter(Boolean);
-  const individual = items.reduce((sum, item) => sum + item.price, 0);
+  const items = ids.map(entry => {
+    const key = typeof entry === "object" ? entry.key : entry;
+    const qty = typeof entry === "object" ? Math.max(1, Number(entry.qty) || 1) : 1;
+    const choice = getVariantChoice(key);
+    return choice ? { ...choice, qty } : null;
+  }).filter(Boolean);
+  const individual = items.reduce((sum, choice) => sum + choice.variant.price * choice.qty, 0);
   const combo = Math.round(individual * 0.9);
   return { items, individual, combo, saving: individual - combo };
 }
@@ -133,7 +210,7 @@ function normalizeCart(lines) {
 
 function availableInventory() {
   const maxBudget = Number(qs("#budgetRange")?.value || 5000);
-  return inventory.filter(item => item.published && item.stock > 0 && item.price <= maxBudget);
+  return inventory.filter(item => item.published && itemVariants(item).some(variant => variant.stock > 0 && variant.price <= maxBudget));
 }
 
 function render() {
@@ -226,7 +303,14 @@ function renderHampers() {
 function renderBuilder() {
   const maxBudget = Number(qs("#budgetRange")?.value || 5000);
   const choices = availableInventory();
-  selectedInventoryIds = selectedInventoryIds.filter(id => choices.some(item => item.id === id));
+  normalizeSelection();
+  selectedInventoryIds = selectedInventoryIds.filter(entry => {
+    const choice = getVariantChoice(entry.key);
+    return choice && choices.some(item => item.id === choice.item.id) && choice.variant.stock > 0 && choice.variant.price <= maxBudget;
+  }).map(entry => {
+    const choice = getVariantChoice(entry.key);
+    return { key: entry.key, qty: Math.min(entry.qty, choice?.variant.stock || entry.qty) };
+  });
   saveState("uniqBuilderSelection", selectedInventoryIds);
   const totals = comboTotals();
   const overBudget = totals.combo > maxBudget;
@@ -237,18 +321,30 @@ function renderBuilder() {
   qs("#comboPrice").textContent = money(totals.combo);
   qs("#comboSaving").textContent = money(totals.saving);
 
-  qs("#inventoryPicker").innerHTML = choices.map(item => {
-    const selected = selectedInventoryIds.includes(item.id);
+  const variantChoices = choices.flatMap(item => itemVariants(item).map((variant, index) => ({ item, variant, key: variantKey(item.id, index) })))
+    .filter(choice => choice.variant.stock > 0 && choice.variant.price <= maxBudget);
+
+  qs("#inventoryPicker").innerHTML = variantChoices.map(choice => {
+    const selected = selectedEntry(choice.key);
     return `
-      <button class="inventory-pick ${selected ? "active" : ""}" data-action="toggleInventoryPick" data-id="${item.id}" type="button">
-        ${productArt(item.image, item.name)}
-        <span>
-          <strong>${escapeHtml(item.name)}</strong>
-          <small>${escapeHtml(item.category)} | ${money(item.price)} | ${item.stock} left</small>
-        </span>
-      </button>
+      <article class="inventory-pick ${selected ? "active" : ""}">
+        <button class="inventory-choice" data-action="toggleInventoryPick" data-id="${choice.key}" type="button">
+          ${productArt(choice.item.image, choice.item.name)}
+          <span>
+            <strong>${escapeHtml(choice.item.name)} - ${escapeHtml(choice.variant.name)}</strong>
+            <small>${escapeHtml(choice.item.category)} | ${money(choice.variant.price)} each | ${choice.variant.stock} available</small>
+          </span>
+        </button>
+        ${selected ? `
+          <div class="variant-qty">
+            <button data-action="builderQtyDown" data-id="${choice.key}" type="button">-</button>
+            <span>${selected.qty}</span>
+            <button data-action="builderQtyUp" data-id="${choice.key}" type="button">+</button>
+          </div>
+        ` : ""}
+      </article>
     `;
-  }).join("") || `<section class="empty-state">No inventory products are available in this price range.</section>`;
+  }).join("") || `<section class="empty-state">No inventory variants are available in this price range.</section>`;
 
   const comboButton = qs("[data-action='addCombo']");
   comboButton.disabled = selectedInventoryIds.length === 0 || overBudget;
@@ -282,9 +378,10 @@ function renderInventoryAdminList() {
           <span>${item.published ? "Live" : "Hidden"}</span>
         </div>
         <p>${escapeHtml(item.description)}</p>
+        <p class="combo-detail">${itemVariants(item).map(variant => `${escapeHtml(variant.name)}: ${money(variant.price)} / ${variant.stock}`).join(", ")}</p>
         <div class="meta-row">
-          <span class="price">${money(item.price)}</span>
-          <span>${item.stock} stock</span>
+          <span class="price">From ${money(Math.min(...itemVariants(item).map(variant => variant.price)))}</span>
+          <span>${item.stock} total qty</span>
         </div>
         <div class="card-actions">
           <button class="ghost-mini" data-action="editInventory" data-id="${item.id}"><i data-lucide="pencil"></i>Edit</button>
@@ -337,6 +434,7 @@ function renderCart() {
       <div>
         <strong>${escapeHtml(item.title)}</strong>
         <p class="muted">${item.type === "combo" ? `Combo ${money(item.price)} vs ${money(item.individualTotal)} individual` : `${money(item.price)} each`}</p>
+        ${item.type === "combo" ? `<p class="combo-detail">${(item.selections || []).map(selection => `${escapeHtml(selection.itemName)} ${escapeHtml(selection.variantName)} x${selection.qty}`).join(", ")}</p>` : ""}
       </div>
       <div class="qty-control">
         <button data-action="decCart" data-cart-id="${item.cartId}" aria-label="Decrease ${escapeHtml(item.title)}">-</button>
@@ -397,13 +495,20 @@ function addComboToCart() {
   const maxBudget = Number(qs("#budgetRange").value);
   if (!totals.items.length) return showToast("Select inventory products first.");
   if (totals.combo > maxBudget) return showToast("Combo is above the selected budget.");
-  const minStock = Math.min(...totals.items.map(item => item.stock));
+  const minStock = Math.min(...totals.items.map(choice => Math.floor(choice.variant.stock / choice.qty)));
   if (minStock < 1) return showToast("One selected item is out of stock.");
   cart.push({
     cartId: `combo:${Date.now()}`,
     type: "combo",
-    itemIds: totals.items.map(item => item.id),
-    title: `Custom combo (${totals.items.length} items)`,
+    selections: totals.items.map(choice => ({
+      itemId: choice.item.id,
+      itemName: choice.item.name,
+      variantName: choice.variant.name,
+      unitPrice: choice.variant.price,
+      qty: choice.qty
+    })),
+    itemIds: totals.items.map(choice => choice.item.id),
+    title: `Custom combo (${totals.items.reduce((sum, choice) => sum + choice.qty, 0)} items)`,
     price: totals.combo,
     individualTotal: totals.individual,
     qty: 1
@@ -416,7 +521,13 @@ function maxQtyForCartLine(line) {
   if (line.type === "hamper") {
     return hampers.find(item => item.id === line.id)?.stock || 0;
   }
-  return Math.min(...line.itemIds.map(id => inventory.find(item => item.id === id)?.stock || 0));
+  const selections = line.selections || line.itemIds?.map(id => ({ itemId: id, variantName: "Default", qty: 1 })) || [];
+  return Math.min(...selections.map(selection => {
+    const item = inventory.find(entry => entry.id === selection.itemId);
+    if (!item) return 0;
+    const variant = itemVariants(item).find(entry => entry.name === selection.variantName) || itemVariants(item)[0];
+    return Math.floor((variant?.stock || 0) / (selection.qty || 1));
+  }));
 }
 
 function changeCart(cartId, delta) {
@@ -445,9 +556,14 @@ function checkout() {
       const hamper = hampers.find(item => item.id === line.id);
       if (hamper) hamper.stock = Math.max(0, hamper.stock - line.qty);
     } else {
-      line.itemIds.forEach(id => {
-        const item = inventory.find(entry => entry.id === id);
-        if (item) item.stock = Math.max(0, item.stock - line.qty);
+      (line.selections || []).forEach(selection => {
+        const item = inventory.find(entry => entry.id === selection.itemId);
+        if (!item) return;
+        const variants = itemVariants(item);
+        const variant = variants.find(entry => entry.name === selection.variantName) || variants[0];
+        if (variant) variant.stock = Math.max(0, variant.stock - (selection.qty || 1) * line.qty);
+        item.variants = variants;
+        syncItemStock(item);
       });
     }
   });
@@ -535,6 +651,7 @@ function editInventory(id) {
   qs("#inventoryCategory").value = item.category;
   qs("#inventoryPrice").value = item.price;
   qs("#inventoryStock").value = item.stock;
+  qs("#inventoryVariants").value = variantsToText(item);
   qs("#inventoryPublished").checked = item.published;
   inventoryDraftImage = item.image || "";
   renderInventoryImagePreview();
@@ -547,6 +664,7 @@ function clearInventoryForm() {
   qs("#inventoryId").value = "";
   qs("#inventoryCategory").value = "Chocolate";
   qs("#inventoryPublished").checked = true;
+  qs("#inventoryVariants").value = "";
   qs("#inventoryImage").value = "";
   inventoryDraftImage = "";
   renderInventoryImagePreview();
@@ -568,6 +686,8 @@ function saveInventory(event) {
     published: qs("#inventoryPublished").checked,
     image: inventoryDraftImage || ""
   };
+  payload.variants = parseVariants(qs("#inventoryVariants").value, payload.price, payload.stock);
+  syncItemStock(payload);
   if (existing) Object.assign(existing, payload);
   else inventory.unshift(payload);
   saveState("uniqInventory", inventory);
@@ -701,11 +821,23 @@ function wireEvents() {
     if (action.dataset.action === "decCart") changeCart(action.dataset.cartId, -1);
     if (action.dataset.action === "checkout") checkout();
     if (action.dataset.action === "toggleInventoryPick") {
-      selectedInventoryIds = selectedInventoryIds.includes(id)
-        ? selectedInventoryIds.filter(itemId => itemId !== id)
-        : [...selectedInventoryIds, id];
+      normalizeSelection();
+      selectedInventoryIds = selectedEntry(id)
+        ? selectedInventoryIds.filter(entry => entry.key !== id)
+        : [...selectedInventoryIds, { key: id, qty: 1 }];
       saveState("uniqBuilderSelection", selectedInventoryIds);
       renderBuilder();
+    }
+    if (action.dataset.action === "builderQtyUp" || action.dataset.action === "builderQtyDown") {
+      normalizeSelection();
+      const entry = selectedInventoryIds.find(item => item.key === id);
+      const choice = getVariantChoice(id);
+      if (entry && choice) {
+        entry.qty += action.dataset.action === "builderQtyUp" ? 1 : -1;
+        entry.qty = Math.max(1, Math.min(entry.qty, choice.variant.stock));
+        saveState("uniqBuilderSelection", selectedInventoryIds);
+        renderBuilder();
+      }
     }
     if (action.dataset.action === "addCombo") addComboToCart();
     if (action.dataset.action === "editHamper") editHamper(id);

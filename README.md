@@ -24,7 +24,9 @@ http://127.0.0.1:4173/index.html
 - Admin password gate for catalog editing
 - Hamper picture upload with local preview/storage
 - Separate admin section with inventory management
+- Inventory variants with per-variant price and quantity
 - Build-your-own hamper from live inventory
+- Builder quantity controls for selected inventory variants
 - Combo pricing at 10% less than individual item total
 - Customer cart with quantities, total, and checkout-style order flow
 - Build Your Own Hamper
