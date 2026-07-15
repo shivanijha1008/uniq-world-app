@@ -62,6 +62,7 @@ const defaultInventory = [
 let activeFilter = "All";
 let moodIndex = 0;
 let adminUnlocked = sessionStorage.getItem("uniqAdminUnlocked") === "true";
+let adminToken = sessionStorage.getItem("uniqAdminToken") || "";
 let hampers = loadState("uniqHampers", defaultHampers).map(item => ({ image: "", ...item }));
 let inventory = loadState("uniqInventory", defaultInventory).map(item => {
   const normalized = { image: "", published: true, ...item };
@@ -99,9 +100,11 @@ function saveState(key, value) {
 
 async function apiSave(key, value) {
   try {
+    const headers = { "Content-Type": "application/json" };
+    if (adminToken) headers.Authorization = `Bearer ${adminToken}`;
     await fetch(`${API_BASE}/api/state/${key}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ value })
     });
   } catch {
@@ -109,27 +112,43 @@ async function apiSave(key, value) {
   }
 }
 
+function applyState(state) {
+  hampers = (state.hampers || hampers).map(item => ({ image: "", ...item }));
+  inventory = (state.inventory || inventory).map(item => {
+    const normalized = { image: "", published: true, ...item };
+    syncItemStock(normalized);
+    return normalized;
+  });
+  cart = normalizeCart(state.cart || cart);
+  localStorage.setItem("uniqHampers", JSON.stringify(hampers));
+  localStorage.setItem("uniqInventory", JSON.stringify(inventory));
+  localStorage.setItem("uniqCart", JSON.stringify(cart));
+}
+
 async function hydrateFromApi() {
   try {
     const response = await fetch(`${API_BASE}/api/state`, { cache: "no-store" });
     if (!response.ok) return;
-    const state = await response.json();
-    hampers = (state.hampers || hampers).map(item => ({ image: "", ...item }));
-    inventory = (state.inventory || inventory).map(item => {
-      const normalized = { image: "", published: true, ...item };
-      syncItemStock(normalized);
-      return normalized;
-    });
-    cart = normalizeCart(state.cart || cart);
-    localStorage.setItem("uniqHampers", JSON.stringify(hampers));
-    localStorage.setItem("uniqInventory", JSON.stringify(inventory));
-    localStorage.setItem("uniqCart", JSON.stringify(cart));
+    applyState(await response.json());
     renderHome();
     renderHampers();
     renderBuilder();
     renderAdmin();
     renderCart();
     lucide.createIcons();
+  } catch {
+    // Static hosting fallback.
+  }
+}
+
+function connectRealtime() {
+  if (!("EventSource" in window)) return;
+  try {
+    const events = new EventSource(`${API_BASE}/api/events`);
+    events.onmessage = event => {
+      const payload = JSON.parse(event.data || "{}");
+      if (payload.type === "state-updated") hydrateFromApi();
+    };
   } catch {
     // Static hosting fallback.
   }
@@ -615,13 +634,34 @@ function persistCart() {
   renderHampers();
 }
 
-function checkout() {
+async function checkout() {
   const message = qs("#checkoutMessage");
   if (!cart.length) {
     message.textContent = "Add at least one item before placing an order.";
     return;
   }
   const orderItems = structuredClone(cart);
+  try {
+    const response = await fetch(`${API_BASE}/api/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: orderItems, status: "placed" })
+    });
+    if (response.ok) {
+      const result = await response.json();
+      if (result.state) applyState(result.state);
+      selectedInventoryIds = [];
+      saveState("uniqBuilderSelection", selectedInventoryIds);
+      message.textContent = "Order placed. Inventory and hamper stock updated.";
+      renderHampers();
+      renderBuilder();
+      renderAdmin();
+      renderCart();
+      return;
+    }
+  } catch {
+    // Static hosting fallback below.
+  }
   cart.forEach(line => {
     if (line.type === "hamper") {
       const hamper = hampers.find(item => item.id === line.id);
@@ -645,11 +685,6 @@ function checkout() {
   selectedInventoryIds = [];
   saveState("uniqBuilderSelection", selectedInventoryIds);
   message.textContent = "Order placed. Inventory and hamper stock updated.";
-  fetch(`${API_BASE}/api/orders`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items: orderItems, status: "placed" })
-  }).catch(() => {});
   renderHampers();
   renderBuilder();
   renderAdmin();
@@ -821,12 +856,18 @@ async function unlockAdmin(event) {
       body: JSON.stringify({ password: input.value })
     });
     apiOk = response.ok;
+    if (apiOk) {
+      const result = await response.json();
+      adminToken = result.token || "";
+      sessionStorage.setItem("uniqAdminToken", adminToken);
+    }
   } catch {
     apiOk = false;
   }
   if (input.value === ADMIN_PASSWORD || apiOk) {
     adminUnlocked = true;
     sessionStorage.setItem("uniqAdminUnlocked", "true");
+    if (!adminToken && input.value === ADMIN_PASSWORD) sessionStorage.setItem("uniqAdminToken", "");
     input.value = "";
     message.textContent = "";
     renderAdmin();
@@ -839,7 +880,9 @@ async function unlockAdmin(event) {
 
 function lockAdmin() {
   adminUnlocked = false;
+  adminToken = "";
   sessionStorage.removeItem("uniqAdminUnlocked");
+  sessionStorage.removeItem("uniqAdminToken");
   draftImage = "";
   inventoryDraftImage = "";
   renderAdmin();
@@ -975,3 +1018,4 @@ function wireEvents() {
 
 render();
 hydrateFromApi();
+connectRealtime();

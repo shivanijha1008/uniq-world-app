@@ -5,6 +5,8 @@ const crypto = require("crypto");
 
 const PORT = Number(process.env.PORT || 4173);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "uniqadmin";
+const sessions = new Set();
+const clients = new Set();
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
@@ -39,11 +41,33 @@ function readDb() {
 
 function writeDb(db) {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  broadcast({ type: "state-updated", at: new Date().toISOString() });
 }
 
 function sendJson(res, status, payload) {
-  res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+  res.writeHead(status, {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff"
+  });
   res.end(JSON.stringify(payload));
+}
+
+function isAdmin(req) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  return sessions.has(token);
+}
+
+function requireAdmin(req, res) {
+  if (isAdmin(req)) return true;
+  sendJson(res, 401, { error: "Admin login required" });
+  return false;
+}
+
+function broadcast(event) {
+  const payload = `data: ${JSON.stringify(event)}\n\n`;
+  clients.forEach(client => client.write(payload));
 }
 
 function readBody(req) {
@@ -97,6 +121,22 @@ async function handleApi(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const db = readDb();
 
+  if (req.method === "GET" && url.pathname === "/api/health") {
+    return sendJson(res, 200, { ok: true, service: "uniq-world", time: new Date().toISOString() });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/events") {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-store",
+      Connection: "keep-alive"
+    });
+    res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
+    clients.add(res);
+    req.on("close", () => clients.delete(res));
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/state") {
     return sendJson(res, 200, db);
   }
@@ -104,6 +144,7 @@ async function handleApi(req, res) {
   if (req.method === "PUT" && url.pathname.startsWith("/api/state/")) {
     const key = url.pathname.split("/").pop();
     if (!["hampers", "inventory", "cart"].includes(key)) return sendJson(res, 400, { error: "Invalid state key" });
+    if (["hampers", "inventory"].includes(key) && !requireAdmin(req, res)) return;
     const body = await readBody(req);
     db[key] = body.value;
     writeDb(db);
@@ -113,18 +154,55 @@ async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/admin/login") {
     const body = await readBody(req);
     const ok = body.password === ADMIN_PASSWORD;
-    return sendJson(res, ok ? 200 : 401, { ok, token: ok ? crypto.randomBytes(16).toString("hex") : "" });
+    const token = ok ? crypto.randomBytes(24).toString("hex") : "";
+    if (token) sessions.add(token);
+    return sendJson(res, ok ? 200 : 401, { ok, token });
   }
 
   if (req.method === "POST" && url.pathname === "/api/orders") {
     const body = await readBody(req);
     const order = { id: `order-${Date.now()}`, createdAt: new Date().toISOString(), ...body };
+    applyOrderStock(db, body.items || []);
     db.orders.unshift(order);
+    db.cart = [];
     writeDb(db);
-    return sendJson(res, 201, { ok: true, order });
+    return sendJson(res, 201, { ok: true, order, state: db });
   }
 
   return sendJson(res, 404, { error: "API route not found" });
+}
+
+function itemVariants(item) {
+  return Array.isArray(item.variants) && item.variants.length
+    ? item.variants
+    : [{ name: "Default", price: item.price, stock: item.stock }];
+}
+
+function syncItemStock(item) {
+  const variants = itemVariants(item);
+  item.variants = variants;
+  item.price = variants[0]?.price || item.price || 0;
+  item.stock = variants.reduce((sum, variant) => sum + (Number(variant.stock) || 0), 0);
+}
+
+function applyOrderStock(db, lines) {
+  lines.forEach(line => {
+    if (line.type === "hamper") {
+      const hamper = db.hampers.find(item => item.id === line.id);
+      if (hamper) hamper.stock = Math.max(0, hamper.stock - (line.qty || 1));
+      return;
+    }
+
+    (line.selections || []).forEach(selection => {
+      const item = db.inventory.find(entry => entry.id === selection.itemId);
+      if (!item) return;
+      const variants = itemVariants(item);
+      const variant = variants.find(entry => entry.name === selection.variantName) || variants[0];
+      if (variant) variant.stock = Math.max(0, variant.stock - (selection.qty || 1) * (line.qty || 1));
+      item.variants = variants;
+      syncItemStock(item);
+    });
+  });
 }
 
 const server = http.createServer((req, res) => {
