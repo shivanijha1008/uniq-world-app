@@ -60,6 +60,13 @@
             </div>
             <div class="horizontal-list" id="recommendations"></div>
           </section>
+          <section class="panel">
+            <div class="section-title">
+              <h2>Spotlight hampers</h2>
+              <button data-nav="hampers">Shop</button>
+            </div>
+            <div class="horizontal-list" id="spotlightHampers"></div>
+          </section>
 
           <section class="panel">
             <div class="section-title">
@@ -269,6 +276,15 @@
                   Hamper picture
                   <input id="hamperImage" type="file" accept="image/*" />
                 </label>
+                <label>
+                  Homepage tags
+                  <select id="hamperTags" multiple size="4">
+                    <option value="hero">Hero product</option>
+                    <option value="new">New arrival</option>
+                    <option value="bestselling">Bestselling</option>
+                    <option value="limited">Limited edition</option>
+                  </select>
+                </label>
                 <div class="image-preview" id="imagePreview">No picture selected</div>
                 <label class="checkbox-line">
                   <input id="hamperPublished" type="checkbox" checked />
@@ -365,6 +381,36 @@
             <p class="eyebrow">Relationship Vault</p>
             <h1>Never forget what matters.</h1>
           </div>
+          <section class="panel">
+            <div class="section-title">
+              <h2>Customer sign-in</h2>
+              <button data-action="customerLogout">Sign out</button>
+            </div>
+            <form class="customer-form" id="customerForm">
+              <label>
+                Name
+                <input id="customerName" required placeholder="Your name" />
+              </label>
+              <label>
+                Email or phone
+                <input id="customerContact" required placeholder="email@example.com or mobile" />
+              </label>
+              <button class="primary-button" type="submit"><i data-lucide="user-check"></i>Save sign-in</button>
+              <p class="muted" id="customerStatus"></p>
+            </form>
+          </section>
+          <section class="panel">
+            <div class="section-title">
+              <h2>Notifications</h2>
+              <button data-action="enableNotifications">Allow</button>
+            </div>
+            <div class="admin-grid">
+              <span>Occasion reminders</span>
+              <span>Order updates</span>
+              <span>Offer alerts</span>
+            </div>
+            <p class="muted" id="notificationStatus">Enable browser notifications to receive reminders on this device.</p>
+          </section>
           <div class="vault-list" id="vaultList"></div>
           <section class="panel">
             <div class="section-title">
@@ -404,6 +450,20 @@
               <button data-action="closeCart">Close</button>
             </div>
             <div class="cart-items" id="cartItems"></div>
+            <form class="checkout-address" id="addressForm">
+              <label>
+                Delivery name
+                <input id="deliveryName" required placeholder="Recipient name" />
+              </label>
+              <label>
+                Phone
+                <input id="deliveryPhone" required placeholder="Delivery phone number" />
+              </label>
+              <label>
+                Address
+                <textarea id="deliveryAddress" required placeholder="House, street, city, state, pincode"></textarea>
+              </label>
+            </form>
             <div class="cart-summary">
               <span>Total</span>
               <strong id="cartTotal">Rs 0</strong>

@@ -321,6 +321,8 @@ async function handleApi(req, res) {
       paymentId: body.razorpay_payment_id,
       paymentOrderId: body.razorpay_order_id,
       amount: calculateOrderTotal(db, items),
+      customer: body.customer || {},
+      delivery: body.delivery || {},
       items
     };
     applyOrderStock(db, items);

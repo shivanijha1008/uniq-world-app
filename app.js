@@ -74,6 +74,10 @@ let draftImage = "";
 let inventoryDraftImage = "";
 let selectedInventoryIds = loadState("uniqBuilderSelection", []);
 let occasions = loadState("uniqOccasions", defaultOccasions);
+let customerProfile = loadState("uniqCustomerProfile", { name: "", contact: "" });
+let deliveryProfile = loadState("uniqDeliveryProfile", { name: "", phone: "", address: "" });
+let reviews = loadState("uniqReviews", {});
+let purchasedHamperIds = loadState("uniqPurchasedHampers", []);
 let appConfig = { checked: false, payments: { enabled: false, keyId: "", currency: "INR" }, storage: "json" };
 let challengeJoined = localStorage.getItem("uniqChallengeJoined") === "true";
 
@@ -309,6 +313,7 @@ function render() {
 }
 
 function renderHome() {
+  const spotlight = hampers.filter(item => item.published && item.stock > 0 && (item.tags || []).some(tag => ["hero", "new", "bestselling"].includes(tag))).slice(0, 6);
   qs("#recommendations").innerHTML = defaultRecommendations.map(item => `
     <article class="product-card">
       ${productArt("", item.title)}
@@ -317,6 +322,16 @@ function renderHome() {
       <span class="price">${money(item.price)}</span>
     </article>
   `).join("");
+
+  qs("#spotlightHampers").innerHTML = spotlight.map(hamper => `
+    <article class="product-card spotlight-card">
+      ${productArt(hamper.image, hamper.title)}
+      <span class="tag-row">${(hamper.tags || []).map(tag => `<b>${escapeHtml(tag)}</b>`).join("")}</span>
+      <h3>${escapeHtml(hamper.title)}</h3>
+      <p>${escapeHtml(hamper.copy)}</p>
+      <span class="price">${money(hamper.price)}</span>
+    </article>
+  `).join("") || `<section class="empty-state">Tag hampers as Hero, New, or Bestselling in admin to highlight them here.</section>`;
 
   qs("#occasionList").innerHTML = occasions.map(item => `
     <article class="occasion">
@@ -327,6 +342,9 @@ function renderHome() {
       </div>
       <button class="icon-button" aria-label="Create gift for ${item.title}" data-nav="concierge">
         <i data-lucide="sparkles"></i>
+      </button>
+      <button class="icon-button" aria-label="Edit ${item.title}" data-action="editOccasion" data-title="${escapeHtml(item.title)}">
+        <i data-lucide="pencil"></i>
       </button>
     </article>
   `).join("");
@@ -363,7 +381,9 @@ function renderHampers() {
             <h3>${escapeHtml(hamper.title)}</h3>
             <span>${escapeHtml(hamper.category)}</span>
           </div>
+          <div class="tag-row">${(hamper.tags || []).map(tag => `<b>${escapeHtml(tag)}</b>`).join("")}</div>
           <p>${escapeHtml(hamper.copy)}</p>
+          <div class="review-summary">${reviewSummary(hamper.id)}</div>
           <div class="meta-row">
             <span class="price">${money(hamper.price)}</span>
             <span>${hamper.stock} in stock</span>
@@ -375,7 +395,9 @@ function renderHampers() {
             <button class="ghost-mini" data-action="shareHamper" data-id="${hamper.id}">
               <i data-lucide="share-2"></i>Share
             </button>
+            ${purchasedHamperIds.includes(hamper.id) ? `<button class="ghost-mini" data-action="reviewHamper" data-id="${hamper.id}"><i data-lucide="star"></i>Review</button>` : ""}
           </div>
+          ${renderReviews(hamper.id)}
         </div>
       </article>
     `;
@@ -512,6 +534,14 @@ function renderSubscription() {
 }
 
 function renderProfile() {
+  qs("#customerName").value = customerProfile.name || "";
+  qs("#customerContact").value = customerProfile.contact || "";
+  qs("#customerStatus").textContent = customerProfile.name
+    ? `Signed in as ${customerProfile.name}.`
+    : "Sign in before checkout so orders and reviews can be linked to you.";
+  qs("#notificationStatus").textContent = "Notification" in window
+    ? `Browser notification status: ${Notification.permission}.`
+    : "Notifications are not supported in this browser.";
   qs("#vaultList").innerHTML = vault.map(person => `
     <article class="vault-card">
       <span class="avatar">${person.initials}</span>
@@ -544,6 +574,9 @@ function renderCart() {
   const paymentLabel = appConfig.payments?.enabled ? "Pay securely" : "Place order";
   qs("#cartCount").textContent = cartCount;
   qs("#cartTotal").textContent = money(cartTotal);
+  qs("#deliveryName").value = deliveryProfile.name || customerProfile.name || "";
+  qs("#deliveryPhone").value = deliveryProfile.phone || "";
+  qs("#deliveryAddress").value = deliveryProfile.address || "";
   qs("#cartItems").innerHTML = cart.length ? cart.map(item => `
     <article class="cart-line ${item.type === "reward" ? "reward-line" : ""}">
       <div>
@@ -563,6 +596,24 @@ function renderCart() {
     checkoutButton.innerHTML = `<i data-lucide="credit-card"></i>${paymentLabel}`;
     checkoutButton.disabled = !cart.length;
   }
+}
+
+function renderReviews(hamperId) {
+  const list = reviews[hamperId] || [];
+  if (!list.length) return "";
+  return `<div class="review-list">${list.slice(0, 3).map(review => `
+    <article>
+      <strong>${"*".repeat(review.rating)}${"-".repeat(5 - review.rating)} ${escapeHtml(review.name)}</strong>
+      <p>${escapeHtml(review.text)}</p>
+    </article>
+  `).join("")}</div>`;
+}
+
+function reviewSummary(hamperId) {
+  const list = reviews[hamperId] || [];
+  if (!list.length) return "No reviews yet";
+  const avg = list.reduce((sum, review) => sum + review.rating, 0) / list.length;
+  return `${avg.toFixed(1)} stars from ${list.length} review${list.length === 1 ? "" : "s"}`;
 }
 
 function navigate(screen) {
@@ -767,19 +818,29 @@ async function checkout() {
     message.textContent = "Add at least one item before placing an order.";
     return;
   }
+  if (!customerProfile.name || !customerProfile.contact) {
+    message.textContent = "Please sign in from Profile before checkout.";
+    navigate("profile");
+    return;
+  }
+  if (!captureDeliveryProfile()) {
+    message.textContent = "Add delivery name, phone, and full address before checkout.";
+    return;
+  }
   if (!appConfig.checked) await hydrateConfig();
   const orderItems = structuredClone(cart);
+  const orderMeta = { customer: customerProfile, delivery: deliveryProfile };
   if (appConfig.payments?.enabled) {
     try {
       message.textContent = "Opening secure payment...";
       const response = await fetch(`${API_BASE}/api/payments/create-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: orderItems })
+        body: JSON.stringify({ items: orderItems, ...orderMeta })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Payment could not be started.");
-      await openRazorpayCheckout(result, orderItems);
+      await openRazorpayCheckout(result, orderItems, orderMeta);
       return;
     } catch (error) {
       message.textContent = error.message || "Payment could not be completed.";
@@ -794,11 +855,12 @@ async function checkout() {
     const response = await fetch(`${API_BASE}/api/orders`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: orderItems, status: "placed" })
+      body: JSON.stringify({ items: orderItems, status: "placed", ...orderMeta })
     });
     if (response.ok) {
       const result = await response.json();
       if (result.state) applyState(result.state);
+      markPurchased(orderItems);
       selectedInventoryIds = [];
       saveState("uniqBuilderSelection", selectedInventoryIds);
       message.textContent = "Order placed. Inventory and hamper stock updated.";
@@ -828,6 +890,7 @@ async function checkout() {
     }
   });
   cart = [];
+  markPurchased(orderItems);
   saveState("uniqHampers", hampers);
   saveState("uniqInventory", inventory);
   saveState("uniqCart", cart);
@@ -840,7 +903,7 @@ async function checkout() {
   renderCart();
 }
 
-function openRazorpayCheckout(paymentOrder, orderItems) {
+function openRazorpayCheckout(paymentOrder, orderItems, orderMeta = {}) {
   return new Promise((resolve, reject) => {
     loadRazorpayScript().then(() => {
     const options = {
@@ -856,11 +919,12 @@ function openRazorpayCheckout(paymentOrder, orderItems) {
           const verifyResponse = await fetch(`${API_BASE}/api/payments/verify`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...response, items: orderItems })
+            body: JSON.stringify({ ...response, items: orderItems, ...orderMeta })
           });
           const result = await verifyResponse.json();
           if (!verifyResponse.ok) throw new Error(result.error || "Payment verification failed.");
           if (result.state) applyState(result.state);
+          markPurchased(orderItems);
           selectedInventoryIds = [];
           saveState("uniqBuilderSelection", selectedInventoryIds);
           qs("#checkoutMessage").textContent = "Payment successful. Order placed and stock updated.";
@@ -912,6 +976,9 @@ function editHamper(id) {
   qs("#hamperPrice").value = hamper.price;
   qs("#hamperStock").value = hamper.stock;
   qs("#hamperPublished").checked = hamper.published;
+  qsa("#hamperTags option").forEach(option => {
+    option.selected = (hamper.tags || []).includes(option.value);
+  });
   draftImage = hamper.image || "";
   renderImagePreview();
   navigate("admin");
@@ -923,6 +990,7 @@ function clearHamperForm() {
   qs("#hamperId").value = "";
   qs("#hamperCategory").value = "Luxury";
   qs("#hamperPublished").checked = true;
+  qsa("#hamperTags option").forEach(option => { option.selected = false; });
   qs("#hamperImage").value = "";
   draftImage = "";
   renderImagePreview();
@@ -942,6 +1010,7 @@ function saveHamper(event) {
     stock: Number(qs("#hamperStock").value),
     category: qs("#hamperCategory").value,
     published: qs("#hamperPublished").checked,
+    tags: qsa("#hamperTags option").filter(option => option.selected).map(option => option.value),
     image: draftImage || ""
   };
   if (existing) Object.assign(existing, payload);
@@ -1363,6 +1432,85 @@ function removeReward() {
   showToast("Reward discount removed.");
 }
 
+function saveCustomer(event) {
+  event.preventDefault();
+  customerProfile = {
+    name: qs("#customerName").value.trim(),
+    contact: qs("#customerContact").value.trim()
+  };
+  localStorage.setItem("uniqCustomerProfile", JSON.stringify(customerProfile));
+  renderProfile();
+  showToast("Customer sign-in saved.");
+}
+
+function customerLogout() {
+  customerProfile = { name: "", contact: "" };
+  localStorage.removeItem("uniqCustomerProfile");
+  renderProfile();
+  showToast("Signed out.");
+}
+
+function captureDeliveryProfile() {
+  deliveryProfile = {
+    name: qs("#deliveryName").value.trim(),
+    phone: qs("#deliveryPhone").value.trim(),
+    address: qs("#deliveryAddress").value.trim()
+  };
+  if (!deliveryProfile.name || !deliveryProfile.phone || !deliveryProfile.address) return false;
+  localStorage.setItem("uniqDeliveryProfile", JSON.stringify(deliveryProfile));
+  return true;
+}
+
+async function enableNotifications() {
+  if (!("Notification" in window)) return showToast("Notifications are not supported in this browser.");
+  const permission = await Notification.requestPermission();
+  renderProfile();
+  if (permission === "granted") {
+    new Notification("Uniq World reminders enabled", { body: "You will see occasion and order reminders on this device." });
+  } else {
+    showToast("Notifications were not enabled.");
+  }
+}
+
+function editOccasion(title) {
+  const index = occasions.findIndex(item => item.title === title);
+  if (index < 0) return;
+  const current = occasions[index];
+  const nextTitle = prompt("Occasion title", current.title);
+  if (!nextTitle) return;
+  const nextDate = prompt("Day of month", current.date) || current.date;
+  const nextDetail = prompt("Reminder details", current.detail) || current.detail;
+  occasions[index] = { date: nextDate.padStart(2, "0").slice(-2), title: nextTitle, detail: nextDetail };
+  localStorage.setItem("uniqOccasions", JSON.stringify(occasions));
+  renderHome();
+  lucide.createIcons();
+  showToast("Occasion updated.");
+}
+
+function markPurchased(lines) {
+  const ids = lines.filter(line => line.type === "hamper").map(line => line.id);
+  if (!ids.length) return;
+  purchasedHamperIds = [...new Set([...purchasedHamperIds, ...ids])];
+  localStorage.setItem("uniqPurchasedHampers", JSON.stringify(purchasedHamperIds));
+}
+
+function reviewHamper(id) {
+  if (!purchasedHamperIds.includes(id)) return showToast("Reviews unlock after purchase.");
+  const rating = Math.max(1, Math.min(5, Number(prompt("Rating from 1 to 5", "5")) || 5));
+  const text = prompt("Write your review", "Beautiful hamper and premium presentation.");
+  if (!text) return;
+  reviews[id] ||= [];
+  reviews[id].unshift({
+    rating,
+    text,
+    name: customerProfile.name || "Customer",
+    createdAt: new Date().toISOString()
+  });
+  localStorage.setItem("uniqReviews", JSON.stringify(reviews));
+  renderHampers();
+  showToast("Review added under your purchased hamper.");
+}
+
 async function shareHamper(id) {
   const hamper = hampers.find(item => item.id === id);
   if (!hamper) return;
@@ -1407,6 +1555,7 @@ function wireEvents() {
     if (action.dataset.action === "closeCart") closeCart();
     if (action.dataset.action === "addCart") addHamperToCart(id);
     if (action.dataset.action === "shareHamper") shareHamper(id);
+    if (action.dataset.action === "reviewHamper") reviewHamper(id);
     if (action.dataset.action === "incCart") changeCart(action.dataset.cartId, 1);
     if (action.dataset.action === "decCart") changeCart(action.dataset.cartId, -1);
     if (action.dataset.action === "checkout") checkout();
@@ -1457,7 +1606,10 @@ function wireEvents() {
     if (action.dataset.action === "adminLogout") lockAdmin();
     if (action.dataset.action === "calendarUrl") importCalendarUrl();
     if (action.dataset.action === "calendarFile") qs("#calendarImport").click();
+    if (action.dataset.action === "editOccasion") editOccasion(action.dataset.title);
     if (action.dataset.action === "joinChallenge") joinChallenge();
+    if (action.dataset.action === "enableNotifications") enableNotifications();
+    if (action.dataset.action === "customerLogout") customerLogout();
     if (action.dataset.action === "corporateUpload") uploadCorporateCsv();
     if (action.dataset.action === "redeemRewards") redeemRewards();
     if (action.dataset.action === "removeReward") removeReward();
@@ -1468,6 +1620,8 @@ function wireEvents() {
   });
 
   qs("#adminLogin").addEventListener("submit", unlockAdmin);
+  qs("#customerForm").addEventListener("submit", saveCustomer);
+  qs("#addressForm").addEventListener("input", captureDeliveryProfile);
   qs("#hamperEditor").addEventListener("submit", saveHamper);
   qs("#inventoryEditor").addEventListener("submit", saveInventory);
   qs("#hamperImage").addEventListener("change", event => handleImageUpload(event, "hamper"));
