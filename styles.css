@@ -151,6 +151,11 @@ button { cursor: pointer; border: 0; }
   font-weight: 800;
   box-shadow: 0 14px 28px rgba(0,0,0,.18);
 }
+.primary-button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
 
 .hero-visual {
   display: none;
@@ -805,6 +810,42 @@ input[type="range"] { width: 100%; accent-color: var(--plum); }
 .gift-plan h3 { margin: 0 0 8px; }
 .plan-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .plan-grid span { border-radius: 14px; background: #fff; padding: 10px; color: var(--muted); font-size: 12px; }
+.search-results {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.search-result {
+  display: grid;
+  grid-template-columns: 82px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.search-result .product-art {
+  height: 76px;
+  margin: 0;
+  border-radius: 12px;
+}
+.search-result strong,
+.search-result span {
+  display: block;
+}
+.search-result span {
+  margin: 3px 0;
+  color: var(--plum);
+  font-size: 12px;
+  font-weight: 800;
+}
+.search-result p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
 .composer {
   position: absolute;
   left: 18px;

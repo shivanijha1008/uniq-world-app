@@ -2,14 +2,21 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const https = require("https");
 
 const PORT = Number(process.env.PORT || 4173);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "uniqadmin";
+const DATABASE_URL = process.env.DATABASE_URL || "";
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || "";
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "";
+const PAYMENT_CURRENCY = process.env.PAYMENT_CURRENCY || "INR";
 const sessions = new Set();
 const clients = new Set();
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
+let pgPool = null;
+let storageReady = false;
 
 const defaultDb = {
   hampers: [
@@ -27,20 +34,72 @@ const defaultDb = {
   orders: []
 };
 
-function ensureDb() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!fs.existsSync(DB_FILE)) {
-    fs.writeFileSync(DB_FILE, JSON.stringify(defaultDb, null, 2));
+function optionalPg() {
+  try {
+    return require("pg");
+  } catch {
+    return null;
   }
 }
 
-function readDb() {
-  ensureDb();
+async function ensureDb() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (DATABASE_URL) {
+    const pg = optionalPg();
+    if (!pg) throw new Error("DATABASE_URL is set but the pg package is not installed. Run npm install.");
+    if (!pgPool) {
+      pgPool = new pg.Pool({
+        connectionString: DATABASE_URL,
+        ssl: process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false }
+      });
+    }
+    await pgPool.query(`
+      create table if not exists app_state (
+        id text primary key,
+        state jsonb not null,
+        updated_at timestamptz not null default now()
+      )
+    `);
+    await pgPool.query(`
+      create table if not exists orders (
+        id text primary key,
+        order_data jsonb not null,
+        payment_data jsonb,
+        created_at timestamptz not null default now()
+      )
+    `);
+    await pgPool.query(
+      "insert into app_state (id, state) values ($1, $2) on conflict (id) do nothing",
+      ["main", defaultDb]
+    );
+    storageReady = true;
+    return;
+  }
+  if (!fs.existsSync(DB_FILE)) {
+    fs.writeFileSync(DB_FILE, JSON.stringify(defaultDb, null, 2));
+  }
+  storageReady = true;
+}
+
+async function readDb() {
+  if (!storageReady) await ensureDb();
+  if (pgPool) {
+    const result = await pgPool.query("select state from app_state where id = $1", ["main"]);
+    return result.rows[0]?.state || structuredClone(defaultDb);
+  }
   return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
 }
 
-function writeDb(db) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+async function writeDb(db) {
+  if (!storageReady) await ensureDb();
+  if (pgPool) {
+    await pgPool.query(
+      "update app_state set state = $2, updated_at = now() where id = $1",
+      ["main", db]
+    );
+  } else {
+    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  }
   broadcast({ type: "state-updated", at: new Date().toISOString() });
 }
 
@@ -119,10 +178,28 @@ function serveStatic(req, res) {
 
 async function handleApi(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  const db = readDb();
+  const db = await readDb();
 
   if (req.method === "GET" && url.pathname === "/api/health") {
-    return sendJson(res, 200, { ok: true, service: "uniq-world", time: new Date().toISOString() });
+    return sendJson(res, 200, {
+      ok: true,
+      service: "uniq-world",
+      storage: pgPool ? "postgres" : "json",
+      payments: Boolean(RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET),
+      time: new Date().toISOString()
+    });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/config") {
+    return sendJson(res, 200, {
+      storage: pgPool ? "postgres" : "json",
+      payments: {
+        provider: "razorpay",
+        enabled: Boolean(RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET),
+        keyId: RAZORPAY_KEY_ID,
+        currency: PAYMENT_CURRENCY
+      }
+    });
   }
 
   if (req.method === "GET" && url.pathname === "/api/events") {
@@ -141,13 +218,19 @@ async function handleApi(req, res) {
     return sendJson(res, 200, db);
   }
 
+  if (req.method === "GET" && url.pathname === "/api/search") {
+    const query = url.searchParams.get("q") || "";
+    const budget = Number(url.searchParams.get("budget") || 0);
+    return sendJson(res, 200, smartSearch(db, query, budget));
+  }
+
   if (req.method === "PUT" && url.pathname.startsWith("/api/state/")) {
     const key = url.pathname.split("/").pop();
     if (!["hampers", "inventory", "cart"].includes(key)) return sendJson(res, 400, { error: "Invalid state key" });
     if (["hampers", "inventory"].includes(key) && !requireAdmin(req, res)) return;
     const body = await readBody(req);
     db[key] = body.value;
-    writeDb(db);
+    await writeDb(db);
     return sendJson(res, 200, { ok: true, [key]: db[key] });
   }
 
@@ -165,11 +248,154 @@ async function handleApi(req, res) {
     applyOrderStock(db, body.items || []);
     db.orders.unshift(order);
     db.cart = [];
-    writeDb(db);
+    await persistOrder(order);
+    await writeDb(db);
+    return sendJson(res, 201, { ok: true, order, state: db });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/payments/create-order") {
+    const body = await readBody(req);
+    const items = body.items || [];
+    const total = calculateOrderTotal(db, items);
+    if (!items.length || total < 1) return sendJson(res, 400, { error: "Cart is empty" });
+    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+      return sendJson(res, 503, { error: "Payment gateway is not configured", enabled: false });
+    }
+    const receipt = `uniq_${Date.now()}`.slice(0, 40);
+    const razorpayOrder = await createRazorpayOrder({
+      amount: total * 100,
+      currency: PAYMENT_CURRENCY,
+      receipt,
+      notes: { app: "Uniq World", item_count: String(items.length) }
+    });
+    return sendJson(res, 201, {
+      ok: true,
+      keyId: RAZORPAY_KEY_ID,
+      amount: total,
+      currency: PAYMENT_CURRENCY,
+      order: razorpayOrder
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/payments/verify") {
+    const body = await readBody(req);
+    const valid = verifyRazorpaySignature(body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature);
+    if (!valid) return sendJson(res, 400, { error: "Payment verification failed" });
+    const items = body.items || [];
+    const order = {
+      id: `order-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      status: "paid",
+      paymentProvider: "razorpay",
+      paymentId: body.razorpay_payment_id,
+      paymentOrderId: body.razorpay_order_id,
+      amount: calculateOrderTotal(db, items),
+      items
+    };
+    applyOrderStock(db, items);
+    db.orders.unshift(order);
+    db.cart = [];
+    await persistOrder(order, {
+      provider: "razorpay",
+      paymentId: body.razorpay_payment_id,
+      orderId: body.razorpay_order_id
+    });
+    await writeDb(db);
     return sendJson(res, 201, { ok: true, order, state: db });
   }
 
   return sendJson(res, 404, { error: "API route not found" });
+}
+
+function smartSearch(db, query, budget = 0) {
+  const words = query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const catalog = [
+    ...db.hampers.filter(item => item.published).map(item => ({ type: "hamper", title: item.title, description: item.copy, category: item.category, price: item.price, stock: item.stock, image: item.image })),
+    ...db.inventory.filter(item => item.published).map(item => ({ type: "inventory", title: item.name, description: item.description, category: item.category, price: item.price, stock: item.stock, image: item.image }))
+  ];
+  const intentBoosts = {
+    romantic: ["love", "girlfriend", "wife", "anniversary", "rose", "romantic"],
+    wellness: ["wellness", "self", "care", "mom", "relax", "tea", "candle"],
+    corporate: ["corporate", "employee", "client", "office", "welcome", "team"],
+    apology: ["sorry", "apology", "forgive", "repair"]
+  };
+  const results = catalog.map(item => {
+    const haystack = `${item.title} ${item.description} ${item.category}`.toLowerCase();
+    let score = words.reduce((sum, word) => sum + (haystack.includes(word) ? 4 : 0), 0);
+    Object.values(intentBoosts).forEach(group => {
+      if (group.some(word => words.includes(word)) && group.some(word => haystack.includes(word))) score += 5;
+    });
+    if (budget && item.price <= budget) score += 3;
+    if (item.stock > 0) score += 2;
+    return { ...item, score };
+  }).filter(item => item.score > 0).sort((a, b) => b.score - a.score || a.price - b.price);
+  return {
+    query,
+    budget,
+    summary: results.length
+      ? `Found ${results.length} gift matches${budget ? ` under ${budget}` : ""}.`
+      : "No exact match yet. Try recipient, occasion, mood, or budget.",
+    results: results.slice(0, 8)
+  };
+}
+
+function calculateOrderTotal(db, lines) {
+  return lines.reduce((sum, line) => {
+    const qty = Math.max(1, Number(line.qty) || 1);
+    if (line.type === "hamper") {
+      const hamper = db.hampers.find(item => item.id === line.id);
+      return sum + (hamper ? hamper.price * qty : 0);
+    }
+    const individual = (line.selections || []).reduce((lineSum, selection) => {
+      const item = db.inventory.find(entry => entry.id === selection.itemId);
+      if (!item) return lineSum;
+      const variant = itemVariants(item).find(entry => entry.name === selection.variantName) || itemVariants(item)[0];
+      return lineSum + (variant?.price || 0) * (Math.max(1, Number(selection.qty) || 1));
+    }, 0);
+    return sum + Math.round(individual * 0.9) * qty;
+  }, 0);
+}
+
+function createRazorpayOrder(payload) {
+  const auth = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString("base64");
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: "api.razorpay.com",
+      path: "/v1/orders",
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json"
+      }
+    }, response => {
+      let body = "";
+      response.on("data", chunk => { body += chunk; });
+      response.on("end", () => {
+        const json = body ? JSON.parse(body) : {};
+        if (response.statusCode >= 200 && response.statusCode < 300) resolve(json);
+        else reject(new Error(json.error?.description || "Razorpay order creation failed"));
+      });
+    });
+    req.on("error", reject);
+    req.end(JSON.stringify(payload));
+  });
+}
+
+function verifyRazorpaySignature(orderId, paymentId, signature) {
+  if (!RAZORPAY_KEY_SECRET || !orderId || !paymentId || !signature) return false;
+  const expected = crypto.createHmac("sha256", RAZORPAY_KEY_SECRET)
+    .update(`${orderId}|${paymentId}`)
+    .digest("hex");
+  if (expected.length !== String(signature).length) return false;
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+}
+
+async function persistOrder(order, payment = null) {
+  if (!pgPool) return;
+  await pgPool.query(
+    "insert into orders (id, order_data, payment_data) values ($1, $2, $3) on conflict (id) do update set order_data = excluded.order_data, payment_data = excluded.payment_data",
+    [order.id, order, payment]
+  );
 }
 
 function itemVariants(item) {

@@ -32,12 +32,36 @@ Required environment variable:
 ADMIN_PASSWORD=your-secure-admin-password
 ```
 
+Recommended production variables:
+
+```text
+DATABASE_URL=your-supabase-or-render-postgres-connection-string
+RAZORPAY_KEY_ID=your-razorpay-key-id
+RAZORPAY_KEY_SECRET=your-razorpay-key-secret
+PAYMENT_CURRENCY=INR
+```
+
 Render quick deploy:
 
 1. Connect this GitHub repository.
-2. Use `node server.js` as the start command.
-3. Add `ADMIN_PASSWORD` in environment variables.
-4. Open `/api/health` after deployment to verify the backend is live.
+2. Use `npm install` as the build command.
+3. Use `node server.js` as the start command.
+4. Add `ADMIN_PASSWORD`, `DATABASE_URL`, `RAZORPAY_KEY_ID`, and `RAZORPAY_KEY_SECRET` in environment variables.
+5. Open `/api/health` after deployment to verify the backend is live.
+
+Free database option:
+
+1. Create a free Supabase project.
+2. Copy the PostgreSQL connection string from Supabase project settings.
+3. Paste it into Render as `DATABASE_URL`.
+4. Keep `PGSSLMODE` unset unless your provider asks otherwise.
+
+Payment gateway setup:
+
+1. Create a Razorpay account.
+2. Generate test keys first, then live keys after KYC/go-live approval.
+3. Add `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` to the host environment.
+4. The frontend creates a Razorpay order, opens Checkout, and the backend verifies the payment signature before reducing stock.
 
 Health check:
 
@@ -67,7 +91,10 @@ GitHub Pages can host the static frontend only. For real inventory, orders, admi
 - Corporate portal and rewards sections
 - Static PWA manifest
 - Node.js backend with JSON persistence
+- PostgreSQL storage through `DATABASE_URL` with JSON fallback for local development
 - API routes for app state, admin login, and orders
+- AI catalog search endpoint for concierge recommendations
+- Razorpay payment order creation and payment signature verification
 - Protected admin writes with backend token
 - Server-side order creation and stock deduction
 - Realtime client refresh via server-sent events

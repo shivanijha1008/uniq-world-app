@@ -73,6 +73,7 @@ let cart = normalizeCart(loadState("uniqCart", []));
 let draftImage = "";
 let inventoryDraftImage = "";
 let selectedInventoryIds = loadState("uniqBuilderSelection", []);
+let appConfig = { payments: { enabled: false, keyId: "", currency: "INR" }, storage: "json" };
 
 function qs(selector, root = document) {
   return root.querySelector(selector);
@@ -134,6 +135,17 @@ async function hydrateFromApi() {
     renderHampers();
     renderBuilder();
     renderAdmin();
+    renderCart();
+    lucide.createIcons();
+  } catch {
+    // Static hosting fallback.
+  }
+}
+
+async function hydrateConfig() {
+  try {
+    const response = await fetch(`${API_BASE}/api/config`, { cache: "no-store" });
+    if (response.ok) appConfig = await response.json();
     renderCart();
     lucide.createIcons();
   } catch {
@@ -515,6 +527,7 @@ function renderMood() {
 function renderCart() {
   const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const paymentLabel = appConfig.payments?.enabled ? "Pay securely" : "Place order";
   qs("#cartCount").textContent = cartCount;
   qs("#cartTotal").textContent = money(cartTotal);
   qs("#cartItems").innerHTML = cart.length ? cart.map(item => `
@@ -531,6 +544,11 @@ function renderCart() {
       </div>
     </article>
   `).join("") : `<section class="empty-state">Your cart is waiting for a celebration.</section>`;
+  const checkoutButton = qs("[data-action='checkout']");
+  if (checkoutButton) {
+    checkoutButton.innerHTML = `<i data-lucide="credit-card"></i>${paymentLabel}`;
+    checkoutButton.disabled = !cart.length;
+  }
 }
 
 function navigate(screen) {
@@ -554,7 +572,7 @@ function seedChat() {
   `;
 }
 
-function addConciergeReply(message) {
+async function addConciergeReply(message) {
   const lower = message.toLowerCase();
   const relationship = lower.includes("girlfriend") ? "girlfriend" : lower.includes("mom") ? "mother" : "recipient";
   const budget = message.match(/(?:rs|inr)?\s?([0-9]{3,5})/i)?.[1] || "3200";
@@ -563,6 +581,31 @@ function addConciergeReply(message) {
     <div class="bubble user">${escapeHtml(message)}</div>
     <div class="bubble ai">I'd build a ${theme.toLowerCase()} for your ${relationship}, keeping the total near ${money(budget)}.</div>
   `);
+  try {
+    const response = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(message)}&budget=${encodeURIComponent(budget)}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const search = await response.json();
+    const cards = search.results.map(item => `
+      <article class="search-result">
+        ${productArt(item.image, item.title)}
+        <div>
+          <strong>${escapeHtml(item.title)}</strong>
+          <span>${escapeHtml(item.category)} | ${money(item.price)}</span>
+          <p>${escapeHtml(item.description)}</p>
+        </div>
+      </article>
+    `).join("");
+    qs("#chatLog").insertAdjacentHTML("beforeend", `
+      <div class="gift-plan">
+        <h3>AI search matches</h3>
+        <p class="muted">${escapeHtml(search.summary)}</p>
+        <div class="search-results">${cards || `<section class="empty-state">Try a clearer occasion, recipient, or budget.</section>`}</div>
+      </div>
+    `);
+    lucide.createIcons();
+  } catch {
+    // Keep the local concierge response available offline.
+  }
 }
 
 function addHamperToCart(id) {
@@ -641,6 +684,23 @@ async function checkout() {
     return;
   }
   const orderItems = structuredClone(cart);
+  if (appConfig.payments?.enabled) {
+    try {
+      message.textContent = "Opening secure payment...";
+      const response = await fetch(`${API_BASE}/api/payments/create-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: orderItems })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Payment could not be started.");
+      await openRazorpayCheckout(result, orderItems);
+      return;
+    } catch (error) {
+      message.textContent = error.message || "Payment could not be completed.";
+      return;
+    }
+  }
   try {
     const response = await fetch(`${API_BASE}/api/orders`, {
       method: "POST",
@@ -689,6 +749,50 @@ async function checkout() {
   renderBuilder();
   renderAdmin();
   renderCart();
+}
+
+function openRazorpayCheckout(paymentOrder, orderItems) {
+  return new Promise((resolve, reject) => {
+    if (!window.Razorpay) {
+      reject(new Error("Razorpay checkout did not load. Check your internet connection."));
+      return;
+    }
+    const options = {
+      key: paymentOrder.keyId,
+      amount: paymentOrder.order.amount,
+      currency: paymentOrder.currency,
+      name: "Uniq World",
+      description: "Celebration hamper order",
+      order_id: paymentOrder.order.id,
+      theme: { color: "#ff4d8d" },
+      handler: async response => {
+        try {
+          const verifyResponse = await fetch(`${API_BASE}/api/payments/verify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...response, items: orderItems })
+          });
+          const result = await verifyResponse.json();
+          if (!verifyResponse.ok) throw new Error(result.error || "Payment verification failed.");
+          if (result.state) applyState(result.state);
+          selectedInventoryIds = [];
+          saveState("uniqBuilderSelection", selectedInventoryIds);
+          qs("#checkoutMessage").textContent = "Payment successful. Order placed and stock updated.";
+          renderHampers();
+          renderBuilder();
+          renderAdmin();
+          renderCart();
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
+      },
+      modal: {
+        ondismiss: () => reject(new Error("Payment was cancelled."))
+      }
+    };
+    new window.Razorpay(options).open();
+  });
 }
 
 function editHamper(id) {
@@ -1006,16 +1110,17 @@ function wireEvents() {
   qs("#hamperImage").addEventListener("change", event => handleImageUpload(event, "hamper"));
   qs("#inventoryImage").addEventListener("change", event => handleImageUpload(event, "inventory"));
   qs("#budgetRange").addEventListener("input", renderBuilder);
-  qs("#conciergeForm").addEventListener("submit", event => {
+  qs("#conciergeForm").addEventListener("submit", async event => {
     event.preventDefault();
     const input = qs("#conciergeInput");
     const message = input.value.trim();
     if (!message) return;
     input.value = "";
-    addConciergeReply(message);
+    await addConciergeReply(message);
   });
 }
 
 render();
+hydrateConfig();
 hydrateFromApi();
 connectRealtime();

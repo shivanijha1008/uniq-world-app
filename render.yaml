@@ -3,10 +3,18 @@ services:
     name: uniq-world-app
     env: node
     plan: free
-    buildCommand: ""
+    buildCommand: "npm install"
     startCommand: "node server.js"
     envVars:
       - key: NODE_ENV
         value: production
       - key: ADMIN_PASSWORD
         sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: PAYMENT_CURRENCY
+        value: INR
