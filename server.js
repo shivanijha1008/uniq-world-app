@@ -220,6 +220,17 @@ async function handleApi(req, res) {
     });
   }
 
+  if (req.method === "GET" && url.pathname === "/api/calendar/import") {
+    const source = url.searchParams.get("url") || "";
+    if (!/^https:\/\/.+/i.test(source)) return sendJson(res, 400, { error: "Use a valid https calendar URL" });
+    try {
+      const calendar = await fetchText(source);
+      return sendJson(res, 200, { ok: true, calendar });
+    } catch (error) {
+      return sendJson(res, 400, { error: error.message || "Calendar could not be downloaded" });
+    }
+  }
+
   const db = await readDb();
 
   if (req.method === "GET" && url.pathname === "/api/events") {
@@ -406,6 +417,27 @@ function createRazorpayOrder(payload) {
     req.on("error", reject);
     req.setTimeout(15000, () => req.destroy(new Error("Razorpay request timed out")));
     req.end(JSON.stringify(payload));
+  });
+}
+
+function fetchText(source) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(source, response => {
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        reject(new Error(`Calendar download failed with status ${response.statusCode}`));
+        response.resume();
+        return;
+      }
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", chunk => {
+        body += chunk;
+        if (body.length > 2_000_000) req.destroy(new Error("Calendar file is too large"));
+      });
+      response.on("end", () => resolve(body));
+    });
+    req.setTimeout(15000, () => req.destroy(new Error("Calendar download timed out")));
+    req.on("error", reject);
   });
 }
 

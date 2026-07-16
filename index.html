@@ -65,10 +65,11 @@
             <div class="section-title">
               <h2>Upcoming occasions</h2>
               <div class="section-actions">
-                <button data-action="calendarGoogle">Google</button>
-                <button data-action="calendarIcs">ICS</button>
+                <button data-action="calendarUrl">Import URL</button>
+                <button data-action="calendarFile">Upload ICS</button>
               </div>
             </div>
+            <input id="calendarImport" type="file" accept=".ics,text/calendar" hidden />
             <div class="occasion-list" id="occasionList"></div>
           </section>
 

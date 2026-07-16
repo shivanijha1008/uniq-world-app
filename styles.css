@@ -1369,3 +1369,118 @@ label {
   color: #09070b;
   box-shadow: 0 18px 42px rgba(0,0,0,.45), 0 0 30px rgba(255, 92, 147, .22);
 }
+
+/* Gold card and luxury textbox pass */
+.panel,
+.product-card,
+.hamper-card,
+.vault-card,
+.feature-card,
+.occasion,
+.rating-item,
+.builder-card,
+.inventory-admin-card,
+.gift-plan,
+.cart-line,
+.owner-tools,
+.admin-login,
+.hamper-editor,
+.ai-brief,
+.search-result,
+.emotion-card,
+.inventory-pick,
+.inventory-choice,
+.quick-grid button {
+  background:
+    linear-gradient(145deg, rgba(255, 226, 146, .2), rgba(123, 82, 24, .08) 38%, rgba(19, 12, 5, .92)),
+    linear-gradient(145deg, #2a1b09, #0b0805);
+  border-color: rgba(255, 209, 102, .42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 199, .18),
+    0 18px 42px rgba(0, 0, 0, .44),
+    0 0 30px rgba(255, 209, 102, .1);
+}
+.inventory-pick.active,
+.emotion-card:hover,
+.quick-grid button:hover,
+.filter-row button.active,
+.product-chips button.active,
+.segmented button.active {
+  background:
+    linear-gradient(135deg, rgba(255, 236, 168, .96), rgba(255, 183, 3, .78)),
+    linear-gradient(145deg, #6d460b, #241503);
+  color: #120b04;
+  border-color: rgba(255, 244, 199, .78);
+  box-shadow: 0 0 28px rgba(255, 209, 102, .26), inset 0 1px 0 rgba(255,255,255,.34);
+}
+.inventory-pick.active strong,
+.filter-row button.active,
+.product-chips button.active,
+.segmented button.active {
+  color: #120b04;
+}
+.date-pill,
+.hamper-heading span,
+.avatar,
+.builder-summary > div,
+.builder-prices span,
+.plan-grid span,
+.challenge-row span,
+.admin-grid span,
+.ai-price-strip span {
+  background: linear-gradient(145deg, rgba(255, 232, 166, .2), rgba(85, 54, 10, .45));
+  color: #ffe7a2;
+  border-color: rgba(255, 209, 102, .36);
+}
+.admin-login input,
+.hamper-editor input,
+.hamper-editor textarea,
+.hamper-editor select,
+.ai-brief input,
+.ai-brief textarea,
+.ai-brief select,
+.composer input {
+  min-height: 44px;
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, rgba(255, 238, 188, .12), rgba(255, 209, 102, .04)),
+    rgba(15, 9, 5, .82);
+  border: 1px solid rgba(255, 209, 102, .48);
+  color: #fff8e8;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .1),
+    inset 0 -10px 22px rgba(0, 0, 0, .18),
+    0 0 18px rgba(255, 209, 102, .07);
+}
+.hamper-editor textarea,
+.ai-brief textarea {
+  min-height: 96px;
+}
+.admin-login input:focus,
+.hamper-editor input:focus,
+.hamper-editor textarea:focus,
+.hamper-editor select:focus,
+.ai-brief input:focus,
+.ai-brief textarea:focus,
+.ai-brief select:focus,
+.composer input:focus {
+  outline: 0;
+  border-color: rgba(255, 238, 188, .95);
+  box-shadow:
+    0 0 0 3px rgba(255, 209, 102, .14),
+    0 0 28px rgba(255, 209, 102, .18),
+    inset 0 1px 0 rgba(255, 255, 255, .16);
+}
+.admin-login input::placeholder,
+.hamper-editor input::placeholder,
+.hamper-editor textarea::placeholder,
+.ai-brief input::placeholder,
+.ai-brief textarea::placeholder,
+.composer input::placeholder {
+  color: rgba(255, 225, 159, .58);
+}
+.composer {
+  background: linear-gradient(145deg, rgba(45, 29, 8, .94), rgba(8, 5, 3, .92));
+  border-color: rgba(255, 209, 102, .44);
+  box-shadow: 0 0 28px rgba(255, 209, 102, .12);
+}

@@ -7,7 +7,7 @@ const defaultRecommendations = [
   { title: "Founder Welcome Kit", copy: "Premium notebook, desk candle, coffee, and branded card.", price: 4200 }
 ];
 
-const occasions = [
+const defaultOccasions = [
   { date: "08", title: "Riya's birthday", detail: "Favorite color: sage. Suggested budget Rs 3,000." },
   { date: "16", title: "Parents' anniversary", detail: "Repeat the tea hamper, add photo slideshow." },
   { date: "22", title: "Diwali corporate list", detail: "84 employees need approval workflow." }
@@ -73,6 +73,7 @@ let cart = normalizeCart(loadState("uniqCart", []));
 let draftImage = "";
 let inventoryDraftImage = "";
 let selectedInventoryIds = loadState("uniqBuilderSelection", []);
+let occasions = loadState("uniqOccasions", defaultOccasions);
 let appConfig = { checked: false, payments: { enabled: false, keyId: "", currency: "INR" }, storage: "json" };
 let challengeJoined = localStorage.getItem("uniqChallengeJoined") === "true";
 
@@ -1176,6 +1177,57 @@ function openGoogleCalendar() {
   showToast("Google Calendar opened. Save the reminder there.");
 }
 
+function unfoldIcs(text) {
+  return String(text || "").replace(/\r?\n[ \t]/g, "");
+}
+
+function icsValue(block, field) {
+  const line = block.split(/\r?\n/).find(row => row.startsWith(`${field}`));
+  if (!line) return "";
+  return line.slice(line.indexOf(":") + 1).replace(/\\n/g, " ").replace(/\\,/g, ",").trim();
+}
+
+function parseIcsOccasions(text) {
+  return unfoldIcs(text).split("BEGIN:VEVENT").slice(1).map(block => {
+    const rawDate = icsValue(block, "DTSTART") || icsValue(block, "DTSTART;VALUE=DATE");
+    const day = rawDate.match(/\d{8}/)?.[0]?.slice(6, 8) || "--";
+    const title = icsValue(block, "SUMMARY") || "Calendar occasion";
+    const detail = icsValue(block, "DESCRIPTION") || "Imported from online calendar.";
+    return { date: day, title, detail };
+  }).filter(item => item.title);
+}
+
+function applyImportedOccasions(imported) {
+  if (!imported.length) return showToast("No occasions found in that calendar.");
+  occasions = imported.slice(0, 20);
+  localStorage.setItem("uniqOccasions", JSON.stringify(occasions));
+  renderHome();
+  lucide.createIcons();
+  showToast(`${imported.length} occasion${imported.length === 1 ? "" : "s"} imported into the app.`);
+}
+
+async function importCalendarUrl() {
+  const source = prompt("Paste a public Google/Apple/Outlook .ics calendar URL");
+  if (!source) return;
+  try {
+    const response = await fetch(`${API_BASE}/api/calendar/import?url=${encodeURIComponent(source)}`, { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Calendar import failed.");
+    applyImportedOccasions(parseIcsOccasions(result.calendar));
+  } catch (error) {
+    showToast(error.message || "Calendar import failed.");
+  }
+}
+
+function importCalendarFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  const reader = new FileReader();
+  reader.addEventListener("load", () => applyImportedOccasions(parseIcsOccasions(reader.result)));
+  reader.readAsText(file);
+}
+
 function parseInventoryRow(row, index) {
   const name = row.name || row.Name || row.product || row.Product || row.title || row.Title || "";
   if (!name) return null;
@@ -1403,8 +1455,8 @@ function wireEvents() {
       renderInventoryImagePreview();
     }
     if (action.dataset.action === "adminLogout") lockAdmin();
-    if (action.dataset.action === "calendar" || action.dataset.action === "calendarIcs") syncCalendar();
-    if (action.dataset.action === "calendarGoogle") openGoogleCalendar();
+    if (action.dataset.action === "calendarUrl") importCalendarUrl();
+    if (action.dataset.action === "calendarFile") qs("#calendarImport").click();
     if (action.dataset.action === "joinChallenge") joinChallenge();
     if (action.dataset.action === "corporateUpload") uploadCorporateCsv();
     if (action.dataset.action === "redeemRewards") redeemRewards();
@@ -1421,6 +1473,7 @@ function wireEvents() {
   qs("#hamperImage").addEventListener("change", event => handleImageUpload(event, "hamper"));
   qs("#inventoryImage").addEventListener("change", event => handleImageUpload(event, "inventory"));
   qs("#inventoryImport").addEventListener("change", importInventoryFile);
+  qs("#calendarImport").addEventListener("change", importCalendarFile);
   qs("#budgetRange").addEventListener("input", renderBuilder);
   qs("#aiBriefForm").addEventListener("submit", suggestInventoryHamper);
   qs("#conciergeForm").addEventListener("submit", async event => {
