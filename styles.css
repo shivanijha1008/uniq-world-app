@@ -752,6 +752,10 @@ input[type="range"] { width: 100%; accent-color: var(--plum); }
   font-weight: 800;
 }
 .segmented button.active, .product-chips button.active { background: var(--plum); color: #fff; }
+.challenge-row span.active {
+  background: var(--mint);
+  color: #10241f;
+}
 
 .wellness-card {
   min-height: 220px;
@@ -961,6 +965,10 @@ input[type="range"] { width: 100%; accent-color: var(--plum); }
   border-radius: 18px;
   background: #fff;
   border: 1px solid var(--line);
+}
+.cart-line.reward-line {
+  background: #f0fdf4;
+  border-color: rgba(36, 214, 165, .45);
 }
 .qty-control {
   display: grid;

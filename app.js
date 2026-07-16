@@ -31,11 +31,11 @@ const ratings = [
   ["Linen journal", "Loved", 5]
 ];
 
-const vault = [
+let vault = loadState("uniqVault", [
   { initials: "RS", name: "Riya Sharma", detail: "Birthday Aug 8. Sage, dark chocolate, jasmine, acts of service." },
   { initials: "AM", name: "Aarav Mehta", detail: "Fitness, coffee, tech accessories. Avoid nuts." },
   { initials: "TM", name: "Team Marketing", detail: "22 members. Diwali budget Rs 2,200 each. Needs GST invoice." }
-];
+]);
 
 const moods = [
   ["#ff4d8d", "#ffd166"],
@@ -74,6 +74,7 @@ let draftImage = "";
 let inventoryDraftImage = "";
 let selectedInventoryIds = loadState("uniqBuilderSelection", []);
 let appConfig = { payments: { enabled: false, keyId: "", currency: "INR" }, storage: "json" };
+let challengeJoined = localStorage.getItem("uniqChallengeJoined") === "true";
 
 function qs(selector, root = document) {
   return root.querySelector(selector);
@@ -503,6 +504,7 @@ function renderSubscription() {
       <span class="stars">${"*".repeat(score)}${"-".repeat(5 - score)}</span>
     </article>
   `).join("");
+  qsa(".challenge-row span").forEach(item => item.classList.toggle("active", challengeJoined));
 }
 
 function renderProfile() {
@@ -531,17 +533,17 @@ function renderCart() {
   qs("#cartCount").textContent = cartCount;
   qs("#cartTotal").textContent = money(cartTotal);
   qs("#cartItems").innerHTML = cart.length ? cart.map(item => `
-    <article class="cart-line">
+    <article class="cart-line ${item.type === "reward" ? "reward-line" : ""}">
       <div>
         <strong>${escapeHtml(item.title)}</strong>
-        <p class="muted">${item.type === "combo" ? `Combo ${money(item.price)} vs ${money(item.individualTotal)} individual` : `${money(item.price)} each`}</p>
+        <p class="muted">${item.type === "combo" ? `Combo ${money(item.price)} vs ${money(item.individualTotal)} individual` : item.type === "reward" ? "Uniq Rewards applied" : `${money(item.price)} each`}</p>
         ${item.type === "combo" ? `<p class="combo-detail">${(item.selections || []).map(selection => `${escapeHtml(selection.itemName)} ${escapeHtml(selection.variantName)} x${selection.qty}`).join(", ")}</p>` : ""}
       </div>
-      <div class="qty-control">
+      ${item.type === "reward" ? `<button class="ghost-mini" data-action="removeReward" type="button">Remove</button>` : `<div class="qty-control">
         <button data-action="decCart" data-cart-id="${item.cartId}" aria-label="Decrease ${escapeHtml(item.title)}">-</button>
         <span>${item.qty}</span>
         <button data-action="incCart" data-cart-id="${item.cartId}" aria-label="Increase ${escapeHtml(item.title)}">+</button>
-      </div>
+      </div>`}
     </article>
   `).join("") : `<section class="empty-state">Your cart is waiting for a celebration.</section>`;
   const checkoutButton = qs("[data-action='checkout']");
@@ -1025,6 +1027,105 @@ function closeCart() {
   qs("#cartDrawer").setAttribute("aria-hidden", "true");
 }
 
+function downloadFile(filename, content, type = "text/plain") {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function calendarDate(day) {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  return `${now.getFullYear()}${month}${String(day).padStart(2, "0")}`;
+}
+
+function syncCalendar() {
+  const events = occasions.map(item => [
+    "BEGIN:VEVENT",
+    `UID:uniq-world-${item.date}-${Date.now()}@uniqworld`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")}`,
+    `DTSTART;VALUE=DATE:${calendarDate(item.date)}`,
+    `SUMMARY:${item.title}`,
+    `DESCRIPTION:${item.detail}`,
+    "END:VEVENT"
+  ].join("\r\n")).join("\r\n");
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Uniq World//Gift Calendar//EN", events, "END:VCALENDAR"].join("\r\n");
+  downloadFile("uniq-world-gift-calendar.ics", ics, "text/calendar");
+  showToast("Calendar file downloaded. Open it to add reminders.");
+}
+
+function initialsFor(name) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "UW";
+}
+
+function uploadCorporateCsv() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".csv,text/csv";
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      const rows = String(reader.result || "").split(/\r?\n/).map(row => row.trim()).filter(Boolean);
+      const imported = rows.slice(1).map(row => {
+        const [name = "", detail = "", initials = ""] = row.split(",").map(cell => cell.trim().replace(/^"|"$/g, ""));
+        if (!name) return null;
+        return { name, detail: detail || "Corporate gifting contact", initials: initials || initialsFor(name) };
+      }).filter(Boolean);
+      if (!imported.length) {
+        downloadFile("uniq-world-corporate-template.csv", "name,detail,initials\nRiya Sharma,Birthday Aug 8. Sage and dark chocolate,RS\n", "text/csv");
+        showToast("No rows found. CSV template downloaded.");
+        return;
+      }
+      vault = [...imported, ...vault];
+      localStorage.setItem("uniqVault", JSON.stringify(vault));
+      renderProfile();
+      showToast(`${imported.length} corporate contact${imported.length === 1 ? "" : "s"} imported.`);
+    });
+    reader.readAsText(file);
+  });
+  input.click();
+}
+
+function joinChallenge() {
+  challengeJoined = true;
+  localStorage.setItem("uniqChallengeJoined", "true");
+  qsa(".challenge-row span").forEach(item => item.classList.add("active"));
+  showToast("Challenge joined. Rewards progress saved on this device.");
+}
+
+function redeemRewards() {
+  if (!cart.length) {
+    showToast("Add an item to cart before redeeming rewards.");
+    openCart();
+    return;
+  }
+  if (cart.some(item => item.type === "reward")) {
+    showToast("Rewards are already applied.");
+    openCart();
+    return;
+  }
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const discount = Math.min(500, Math.round(subtotal * 0.1));
+  cart.push({ cartId: "reward:uniq-points", type: "reward", title: "Uniq Rewards Discount", price: -discount, qty: 1 });
+  persistCart();
+  openCart();
+  showToast(`${money(discount)} reward discount applied.`);
+}
+
+function removeReward() {
+  cart = cart.filter(item => item.type !== "reward");
+  persistCart();
+  showToast("Reward discount removed.");
+}
+
 function showToast(message) {
   const toast = qs("#toast");
   toast.textContent = message;
@@ -1091,13 +1192,11 @@ function wireEvents() {
       renderInventoryImagePreview();
     }
     if (action.dataset.action === "adminLogout") lockAdmin();
-    if (action.dataset.action === "calendar") {
-      navigate("profile");
-      showToast("Calendar reminders are ready for birthdays, festivals, and corporate events.");
-    }
-    if (action.dataset.action === "joinChallenge") showToast("Challenge joined. Points will be added after completion.");
-    if (action.dataset.action === "corporateUpload") showToast("Corporate CSV upload can connect to backend employee rows next.");
-    if (action.dataset.action === "redeemRewards") showToast("Rewards can be applied as a checkout discount next.");
+    if (action.dataset.action === "calendar") syncCalendar();
+    if (action.dataset.action === "joinChallenge") joinChallenge();
+    if (action.dataset.action === "corporateUpload") uploadCorporateCsv();
+    if (action.dataset.action === "redeemRewards") redeemRewards();
+    if (action.dataset.action === "removeReward") removeReward();
     if (action.dataset.action === "shuffleMood") {
       moodIndex += 1;
       renderMood();

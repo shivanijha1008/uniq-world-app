@@ -340,8 +340,9 @@ function smartSearch(db, query, budget = 0) {
 }
 
 function calculateOrderTotal(db, lines) {
-  return lines.reduce((sum, line) => {
+  const total = lines.reduce((sum, line) => {
     const qty = Math.max(1, Number(line.qty) || 1);
+    if (line.type === "reward") return Math.max(0, sum + (Number(line.price) || 0) * qty);
     if (line.type === "hamper") {
       const hamper = db.hampers.find(item => item.id === line.id);
       return sum + (hamper ? hamper.price * qty : 0);
@@ -354,6 +355,7 @@ function calculateOrderTotal(db, lines) {
     }, 0);
     return sum + Math.round(individual * 0.9) * qty;
   }, 0);
+  return Math.max(0, total);
 }
 
 function createRazorpayOrder(payload) {
@@ -413,6 +415,7 @@ function syncItemStock(item) {
 
 function applyOrderStock(db, lines) {
   lines.forEach(line => {
+    if (line.type === "reward") return;
     if (line.type === "hamper") {
       const hamper = db.hampers.find(item => item.id === line.id);
       if (hamper) hamper.stock = Math.max(0, hamper.stock - (line.qty || 1));
