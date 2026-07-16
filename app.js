@@ -38,9 +38,9 @@ let vault = loadState("uniqVault", [
 ]);
 
 const moods = [
-  ["#ff4d8d", "#ffd166"],
-  ["#00c2a8", "#7c5cff"],
-  ["#ff8a00", "#3ddc97"]
+  { name: "Romantic Luxe", colors: ["#ff4d8d", "#ffd166"], note: "Use for love, birthdays, anniversaries, and warm celebration boxes." },
+  { name: "Calm Wellness", colors: ["#00c2a8", "#7c5cff"], note: "Use for self-care, apology, recovery, spa, and tea-led hampers." },
+  { name: "Founder Glow", colors: ["#ff8a00", "#3ddc97"], note: "Use for corporate, onboarding, thank-you, and premium client gifting." }
 ];
 
 const defaultHampers = [
@@ -371,6 +371,9 @@ function renderHampers() {
             <button class="primary-mini" data-action="addCart" data-id="${hamper.id}">
               <i data-lucide="shopping-bag"></i>${inCart ? `Added (${inCart})` : "Add to cart"}
             </button>
+            <button class="ghost-mini" data-action="shareHamper" data-id="${hamper.id}">
+              <i data-lucide="share-2"></i>Share
+            </button>
           </div>
         </div>
       </article>
@@ -520,10 +523,18 @@ function renderProfile() {
 }
 
 function renderMood() {
-  const palette = moods[moodIndex % moods.length];
-  qs("#moodBoard").innerHTML = Array.from({ length: 3 }, (_, index) => `
-    <div class="mood-tile" style="background: linear-gradient(135deg, ${palette[index % 2]}, ${palette[(index + 1) % 2]})"></div>
-  `).join("");
+  const mood = moods[moodIndex % moods.length];
+  qs("#moodBoard").innerHTML = `
+    <div class="mood-copy">
+      <strong>${escapeHtml(mood.name)}</strong>
+      <p>${escapeHtml(mood.note)}</p>
+    </div>
+    ${Array.from({ length: 3 }, (_, index) => `
+      <div class="mood-tile" style="background: linear-gradient(135deg, ${mood.colors[index % 2]}, ${mood.colors[(index + 1) % 2]})">
+        <span>${["Wrap", "Card", "Accent"][index]}</span>
+      </div>
+    `).join("")}
+  `;
 }
 
 function renderCart() {
@@ -561,17 +572,87 @@ function navigate(screen) {
 
 function seedChat() {
   qs("#chatLog").innerHTML = `
-    <div class="bubble ai">Tell me the recipient, occasion, budget, personality, favorite colors, and delivery date. I'll turn it into a complete hamper concept.</div>
+    <div class="bubble ai">Fill the brief above and I will suggest a hamper from live inventory with exact item pricing and combo savings.</div>
     <div class="gift-plan">
-      <h3>Example plan</h3>
+      <h3>What I check</h3>
       <div class="plan-grid">
-        <span>Theme: Sage memory ritual</span>
-        <span>Budget: Rs 3,000</span>
-        <span>Box: Magnetic cream</span>
-        <span>QR: Video and playlist</span>
+        <span>Recipient and occasion</span>
+        <span>Budget fit</span>
+        <span>Current stock</span>
+        <span>10% combo price</span>
       </div>
     </div>
   `;
+}
+
+function buildAiBriefText() {
+  return [
+    qs("#aiRecipient")?.value,
+    qs("#aiOccasion")?.value,
+    qs("#aiMood")?.value,
+    qs("#aiRequirements")?.value,
+    qs("#aiBudget")?.value
+  ].filter(Boolean).join(" ");
+}
+
+function inventoryMatches(text, budget) {
+  const words = text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return inventory.flatMap(item => itemVariants(item).map((variant, index) => ({ item, variant, key: variantKey(item.id, index) })))
+    .filter(choice => choice.item.published && choice.variant.stock > 0 && choice.variant.price <= budget)
+    .map(choice => {
+      const haystack = `${choice.item.name} ${choice.item.description} ${choice.item.category} ${choice.variant.name}`.toLowerCase();
+      const score = words.reduce((sum, word) => sum + (haystack.includes(word) ? 4 : 0), 0)
+        + (choice.item.category.toLowerCase().includes(qs("#aiMood")?.value.toLowerCase() || "") ? 5 : 0)
+        + Math.max(0, 4 - Math.floor(choice.variant.price / 1000));
+      return { ...choice, score };
+    })
+    .sort((a, b) => b.score - a.score || a.variant.price - b.variant.price);
+}
+
+function suggestInventoryHamper(event) {
+  event.preventDefault();
+  const budget = Number(qs("#aiBudget").value) || 3000;
+  const brief = buildAiBriefText();
+  const picks = [];
+  let total = 0;
+  inventoryMatches(brief, budget).forEach(choice => {
+    if (picks.some(pick => pick.item.id === choice.item.id)) return;
+    if (picks.length >= 5) return;
+    if (total + choice.variant.price <= budget || picks.length < 3) {
+      picks.push(choice);
+      total += choice.variant.price;
+    }
+  });
+  const combo = Math.round(total * 0.9);
+  const underBudget = combo <= budget;
+  const title = `${qs("#aiMood").value} ${qs("#aiOccasion").value || "Gift"} Hamper`;
+  qs("#chatLog").insertAdjacentHTML("afterbegin", `
+    <div class="gift-plan ai-plan">
+      <h3>${escapeHtml(title)}</h3>
+      <p class="muted">For ${escapeHtml(qs("#aiRecipient").value || "recipient")} | Budget ${money(budget)} | ${underBudget ? "Fits budget" : "Slightly above budget"}</p>
+      <div class="ai-price-strip">
+        <span>Individual: <strong>${money(total)}</strong></span>
+        <span>Combo: <strong>${money(combo)}</strong></span>
+        <span>Saving: <strong>${money(total - combo)}</strong></span>
+      </div>
+      <div class="search-results">
+        ${picks.map(choice => `
+          <article class="search-result">
+            ${productArt(choice.item.image, choice.item.name)}
+            <div>
+              <strong>${escapeHtml(choice.item.name)} - ${escapeHtml(choice.variant.name)}</strong>
+              <span>${escapeHtml(choice.item.category)} | ${money(choice.variant.price)} | ${choice.variant.stock} available</span>
+              <p>${escapeHtml(choice.item.description)}</p>
+            </div>
+          </article>
+        `).join("") || `<section class="empty-state">No live inventory fits this brief yet. Add more inventory or increase budget.</section>`}
+      </div>
+      <div class="card-actions">
+        <button class="primary-mini" data-action="useAiPicks" data-keys="${picks.map(pick => pick.key).join(",")}"><i data-lucide="package-plus"></i>Use in builder</button>
+      </div>
+    </div>
+  `);
+  lucide.createIcons();
 }
 
 async function addConciergeReply(message) {
@@ -1082,6 +1163,88 @@ function syncCalendar() {
   showToast("Calendar file downloaded. Open it to add reminders.");
 }
 
+function openGoogleCalendar() {
+  const item = occasions[0];
+  const date = calendarDate(item.date);
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: item.title,
+    dates: `${date}/${date}`,
+    details: `${item.detail}\n\nCreated from Uniq World gifting reminders.`
+  });
+  window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, "_blank", "noopener,noreferrer");
+  showToast("Google Calendar opened. Save the reminder there.");
+}
+
+function parseInventoryRow(row, index) {
+  const name = row.name || row.Name || row.product || row.Product || row.title || row.Title || "";
+  if (!name) return null;
+  const price = Number(row.price || row.Price || row["Individual price"] || row.individualPrice || 0);
+  const stock = Number(row.stock || row.Stock || row.quantity || row.Quantity || 0);
+  const variantsText = row.variants || row.Variants || "";
+  const payload = {
+    id: String(row.id || row.ID || name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `inventory-${Date.now()}-${index}`,
+    name: String(name).trim(),
+    description: String(row.description || row.Description || "Imported inventory item").trim(),
+    category: String(row.category || row.Category || "Lifestyle").trim(),
+    price,
+    stock,
+    published: String(row.published || row.Published || "true").toLowerCase() !== "false",
+    image: ""
+  };
+  payload.variants = variantsText
+    ? parseVariants(String(variantsText), price, stock)
+    : [{ name: String(row.variant || row.Variant || "Default"), price, stock }];
+  syncItemStock(payload);
+  return payload;
+}
+
+async function importInventoryFile(event) {
+  if (!adminUnlocked) return showToast("Unlock admin before importing inventory.");
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  try {
+    const rows = await readSpreadsheetRows(file);
+    const imported = rows.map(parseInventoryRow).filter(Boolean);
+    if (!imported.length) return showToast("No valid inventory rows found.");
+    const byId = new Map(inventory.map(item => [item.id, item]));
+    imported.forEach(item => byId.set(item.id, item));
+    inventory = [...byId.values()];
+    saveState("uniqInventory", inventory);
+    renderBuilder();
+    renderAdmin();
+    showToast(`${imported.length} inventory item${imported.length === 1 ? "" : "s"} imported.`);
+  } catch (error) {
+    showToast(error.message || "Inventory import failed.");
+  }
+}
+
+function readSpreadsheetRows(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read file."));
+    reader.onload = () => {
+      try {
+        if (file.name.toLowerCase().endsWith(".csv")) {
+          const [headerLine = "", ...lines] = String(reader.result || "").split(/\r?\n/).filter(Boolean);
+          const headers = headerLine.split(",").map(cell => cell.trim());
+          resolve(lines.map(line => Object.fromEntries(line.split(",").map((cell, index) => [headers[index], cell.trim()]))));
+          return;
+        }
+        if (!window.XLSX) throw new Error("Excel parser is still loading. Try again in a few seconds.");
+        const workbook = window.XLSX.read(reader.result, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        resolve(window.XLSX.utils.sheet_to_json(sheet, { defval: "" }));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    if (file.name.toLowerCase().endsWith(".csv")) reader.readAsText(file);
+    else reader.readAsArrayBuffer(file);
+  });
+}
+
 function initialsFor(name) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "UW";
 }
@@ -1148,6 +1311,23 @@ function removeReward() {
   showToast("Reward discount removed.");
 }
 
+async function shareHamper(id) {
+  const hamper = hampers.find(item => item.id === id);
+  if (!hamper) return;
+  const url = `${location.origin}${location.pathname}#hamper-${hamper.id}`;
+  const text = `${hamper.title} from Uniq World - ${money(hamper.price)}. ${hamper.copy}`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: hamper.title, text, url });
+      return;
+    }
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    showToast("Hamper link copied. Share it anywhere.");
+  } catch {
+    showToast("Share cancelled.");
+  }
+}
+
 function showToast(message) {
   const toast = qs("#toast");
   toast.textContent = message;
@@ -1174,6 +1354,7 @@ function wireEvents() {
     if (action.dataset.action === "cart") openCart();
     if (action.dataset.action === "closeCart") closeCart();
     if (action.dataset.action === "addCart") addHamperToCart(id);
+    if (action.dataset.action === "shareHamper") shareHamper(id);
     if (action.dataset.action === "incCart") changeCart(action.dataset.cartId, 1);
     if (action.dataset.action === "decCart") changeCart(action.dataset.cartId, -1);
     if (action.dataset.action === "checkout") checkout();
@@ -1197,6 +1378,13 @@ function wireEvents() {
       }
     }
     if (action.dataset.action === "addCombo") addComboToCart();
+    if (action.dataset.action === "useAiPicks") {
+      selectedInventoryIds = String(action.dataset.keys || "").split(",").filter(Boolean).map(key => ({ key, qty: 1 }));
+      saveState("uniqBuilderSelection", selectedInventoryIds);
+      navigate("builder");
+      renderBuilder();
+      showToast("AI picks moved into the hamper builder.");
+    }
     if (action.dataset.action === "editHamper") editHamper(id);
     if (action.dataset.action === "deleteHamper") deleteHamper(id);
     if (action.dataset.action === "newHamper") clearHamperForm();
@@ -1208,13 +1396,15 @@ function wireEvents() {
     if (action.dataset.action === "editInventory") editInventory(id);
     if (action.dataset.action === "deleteInventory") deleteInventory(id);
     if (action.dataset.action === "newInventory") clearInventoryForm();
+    if (action.dataset.action === "importInventory") qs("#inventoryImport").click();
     if (action.dataset.action === "removeInventoryImage") {
       inventoryDraftImage = "";
       qs("#inventoryImage").value = "";
       renderInventoryImagePreview();
     }
     if (action.dataset.action === "adminLogout") lockAdmin();
-    if (action.dataset.action === "calendar") syncCalendar();
+    if (action.dataset.action === "calendar" || action.dataset.action === "calendarIcs") syncCalendar();
+    if (action.dataset.action === "calendarGoogle") openGoogleCalendar();
     if (action.dataset.action === "joinChallenge") joinChallenge();
     if (action.dataset.action === "corporateUpload") uploadCorporateCsv();
     if (action.dataset.action === "redeemRewards") redeemRewards();
@@ -1230,7 +1420,9 @@ function wireEvents() {
   qs("#inventoryEditor").addEventListener("submit", saveInventory);
   qs("#hamperImage").addEventListener("change", event => handleImageUpload(event, "hamper"));
   qs("#inventoryImage").addEventListener("change", event => handleImageUpload(event, "inventory"));
+  qs("#inventoryImport").addEventListener("change", importInventoryFile);
   qs("#budgetRange").addEventListener("input", renderBuilder);
+  qs("#aiBriefForm").addEventListener("submit", suggestInventoryHamper);
   qs("#conciergeForm").addEventListener("submit", async event => {
     event.preventDefault();
     const input = qs("#conciergeInput");
