@@ -1875,8 +1875,12 @@ function wireEvents() {
       const entry = selectedInventoryIds.find(item => item.key === id);
       const choice = getVariantChoice(id);
       if (entry && choice) {
-        entry.qty += action.dataset.action === "builderQtyUp" ? 1 : -1;
-        entry.qty = Math.max(1, Math.min(entry.qty, choice.variant.stock));
+        if (action.dataset.action === "builderQtyDown" && entry.qty <= 1) {
+          selectedInventoryIds = selectedInventoryIds.filter(item => item.key !== id);
+        } else {
+          entry.qty += action.dataset.action === "builderQtyUp" ? 1 : -1;
+          entry.qty = Math.max(1, Math.min(entry.qty, choice.variant.stock));
+        }
         saveState("uniqBuilderSelection", selectedInventoryIds);
         renderBuilder();
       }
