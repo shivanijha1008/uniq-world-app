@@ -39,6 +39,10 @@ DATABASE_URL=your-supabase-or-render-postgres-connection-string
 RAZORPAY_KEY_ID=your-razorpay-key-id
 RAZORPAY_KEY_SECRET=your-razorpay-key-secret
 PAYMENT_CURRENCY=INR
+ADMIN_EMAIL=owner@example.com
+ADMIN_WHATSAPP_NUMBER=919999999999
+ADMIN_EMAIL_WEBHOOK_URL=https://your-email-automation-webhook.example.com/uniq-world
+ADMIN_WHATSAPP_WEBHOOK_URL=https://your-whatsapp-provider-webhook.example.com/uniq-world
 ```
 
 Render quick deploy:
@@ -63,6 +67,13 @@ Payment gateway setup:
 3. Add `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` to the host environment.
 4. The frontend creates a Razorpay order, opens Checkout, and the backend verifies the payment signature before reducing stock.
 
+Admin notifications:
+
+1. Create email and WhatsApp provider webhooks with a service such as Zapier/Make, Twilio, Interakt, WATI, Brevo, or SendGrid.
+2. Add the webhook URLs as `ADMIN_EMAIL_WEBHOOK_URL` and `ADMIN_WHATSAPP_WEBHOOK_URL`.
+3. The backend posts order, paid order, and bulk inquiry updates to those URLs with customer, delivery, total, and item details.
+4. `/api/health` shows `adminNotifications: true` when at least one notification webhook is configured.
+
 Health check:
 
 ```text
@@ -74,7 +85,7 @@ GitHub Pages can host the static frontend only. For real inventory, orders, admi
 ## Features
 
 - AI Gift Concierge mock chat
-- Relationship Vault
+- Relationship Vault with editable occasions and one-week-prior calendar reminder downloads
 - Shop by Emotion
 - Ready Hampers
 - Owner hamper editor with publish, stock, price, and delete controls
@@ -88,7 +99,9 @@ GitHub Pages can host the static frontend only. For real inventory, orders, admi
 - Customer cart with quantities, total, and checkout-style order flow
 - Build Your Own Hamper
 - Wellness Subscription
-- Corporate portal and rewards sections
+- Rewards section with points math and referral sharing
+- Admin-editable homepage offer banner
+- Email/WhatsApp admin notification webhooks for orders and bulk inquiries
 - Static PWA manifest
 - Node.js backend with JSON persistence
 - PostgreSQL storage through `DATABASE_URL` with JSON fallback for local development

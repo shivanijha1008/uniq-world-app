@@ -27,6 +27,7 @@
         </header>
 
         <section class="screen active" data-screen="home">
+          <div class="offer-marquee" id="offerMarquee" aria-label="Uniq World offers"></div>
           <div class="hero">
             <div>
               <p class="eyebrow">AI gifting companion</p>
@@ -73,10 +74,36 @@
             <div class="section-title">
               <h2>Upcoming occasions</h2>
               <div class="section-actions">
+                <button data-action="calendarReminders">Download reminders</button>
                 <button data-action="calendarUrl">Import URL</button>
                 <button data-action="calendarFile">Upload ICS</button>
               </div>
             </div>
+            <form class="occasion-form" id="occasionForm">
+              <input id="occasionId" type="hidden" />
+              <label>
+                Occasion
+                <input id="occasionTitle" required maxlength="54" placeholder="Mom's birthday" />
+              </label>
+              <div class="form-row">
+                <label>
+                  Date
+                  <input id="occasionDate" required type="date" />
+                </label>
+                <label>
+                  Reminder
+                  <input value="1 week prior" readonly />
+                </label>
+              </div>
+              <label>
+                Gift notes
+                <textarea id="occasionDetail" maxlength="160" placeholder="Budget, likes, delivery city, products to avoid..."></textarea>
+              </label>
+              <div class="editor-actions">
+                <button class="primary-button" type="submit"><i data-lucide="calendar-plus"></i>Save occasion</button>
+                <button class="ghost-button" type="button" data-action="clearOccasion">Clear</button>
+              </div>
+            </form>
             <input id="calendarImport" type="file" accept=".ics,text/calendar" hidden />
             <div class="occasion-list" id="occasionList"></div>
           </section>
@@ -178,6 +205,19 @@
             <p class="muted" id="adminMessage"></p>
           </form>
           <div class="admin-workspace" id="adminWorkspace" hidden>
+            <section class="panel">
+              <div class="section-title">
+                <h2>Homepage offer banner</h2>
+                <button data-action="saveOffers">Save</button>
+              </div>
+              <form class="hamper-editor" id="offerEditor">
+                <label>
+                  Scrolling messages
+                  <textarea id="offerMessages" maxlength="360" placeholder="Free shipping above Rs 3,000&#10;New international arrivals every week"></textarea>
+                </label>
+                <p class="muted">Add one offer or message per line. These scroll at the top of the homepage.</p>
+              </form>
+            </section>
             <section class="panel">
               <div class="section-title">
                 <h2>Inventory page</h2>
@@ -450,8 +490,19 @@
               <h2>Uniq Rewards</h2>
               <button data-action="redeemRewards">Redeem</button>
             </div>
-            <div class="progress"><span style="width: 68%"></span></div>
-            <p class="muted">6,840 points earned from purchases, reviews, referrals, and unboxing posts.</p>
+            <div class="progress"><span id="rewardProgress" style="width: 0%"></span></div>
+            <p class="muted" id="rewardPointsText"></p>
+            <p class="muted" id="rewardMath"></p>
+          </section>
+          <section class="panel">
+            <div class="section-title">
+              <h2>Referral</h2>
+              <button data-action="shareReferral">Share</button>
+            </div>
+            <div class="referral-card">
+              <strong id="referralCode"></strong>
+              <p class="muted">Give friends Rs 100 off their first hamper. You earn 200 points after their first paid order.</p>
+            </div>
           </section>
         </section>
 

@@ -8,9 +8,15 @@ const defaultRecommendations = [
 ];
 
 const defaultOccasions = [
-  { date: "08", title: "Riya's birthday", detail: "Favorite color: sage. Suggested budget Rs 3,000." },
-  { date: "16", title: "Parents' anniversary", detail: "Repeat the tea hamper, add photo slideshow." },
-  { date: "22", title: "Diwali corporate list", detail: "84 employees need approval workflow." }
+  { id: "occasion-riya", date: "2026-08-08", title: "Riya's birthday", detail: "Favorite color: sage. Suggested budget Rs 3,000." },
+  { id: "occasion-parents", date: "2026-08-16", title: "Parents' anniversary", detail: "Repeat the tea hamper, add photo slideshow." },
+  { id: "occasion-diwali", date: "2026-11-08", title: "Diwali corporate list", detail: "84 employees need approval workflow." }
+];
+
+const defaultOffers = [
+  "Free shipping above Rs 3,000",
+  "Rare finds sourced from international shops worldwide",
+  "Build your own hamper and save 10% on combo pricing"
 ];
 
 const emotions = [
@@ -73,13 +79,15 @@ let cart = normalizeCart(loadState("uniqCart", []));
 let draftImage = "";
 let inventoryDraftImage = "";
 let selectedInventoryIds = loadState("uniqBuilderSelection", []);
-let occasions = loadState("uniqOccasions", defaultOccasions);
+let occasions = normalizeOccasions(loadState("uniqOccasions", defaultOccasions));
 let customerProfile = loadState("uniqCustomerProfile", { name: "", contact: "" });
 let deliveryProfile = loadState("uniqDeliveryProfile", { name: "", phone: "", address: "" });
 let reviews = loadState("uniqReviews", {});
 let purchasedHamperIds = loadState("uniqPurchasedHampers", []);
 let adminOrders = loadState("uniqAdminOrders", []);
 let bulkInquiries = loadState("uniqBulkInquiries", []);
+let offerMessages = loadState("uniqOfferMessages", defaultOffers);
+let rewardPoints = Number(localStorage.getItem("uniqRewardPoints") || 6840);
 let appConfig = { checked: false, payments: { enabled: false, keyId: "", currency: "INR" }, storage: "json" };
 let challengeJoined = localStorage.getItem("uniqChallengeJoined") === "true";
 
@@ -101,8 +109,8 @@ function loadState(key, fallback) {
 
 function saveState(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
-  if (["uniqHampers", "uniqInventory", "uniqCart"].includes(key)) {
-    const apiKey = { uniqHampers: "hampers", uniqInventory: "inventory", uniqCart: "cart" }[key];
+  if (["uniqHampers", "uniqInventory", "uniqCart", "uniqOfferMessages"].includes(key)) {
+    const apiKey = { uniqHampers: "hampers", uniqInventory: "inventory", uniqCart: "cart", uniqOfferMessages: "offers" }[key];
     apiSave(apiKey, value);
   }
 }
@@ -129,9 +137,11 @@ function applyState(state) {
     return normalized;
   });
   cart = normalizeCart(state.cart || cart);
+  offerMessages = Array.isArray(state.offers) && state.offers.length ? state.offers : offerMessages;
   localStorage.setItem("uniqHampers", JSON.stringify(hampers));
   localStorage.setItem("uniqInventory", JSON.stringify(inventory));
   localStorage.setItem("uniqCart", JSON.stringify(cart));
+  localStorage.setItem("uniqOfferMessages", JSON.stringify(offerMessages));
 }
 
 async function hydrateFromApi() {
@@ -186,6 +196,69 @@ function escapeHtml(value) {
     '"': "&quot;",
     "'": "&#039;"
   }[char]));
+}
+
+function normalizeOccasions(list) {
+  return (Array.isArray(list) ? list : []).map((item, index) => ({
+    id: item.id || `occasion-${Date.now()}-${index}`,
+    date: normalizeOccasionDate(item.date),
+    title: item.title || "Gift occasion",
+    detail: item.detail || "Reminder saved in Uniq World."
+  })).sort((a, b) => occasionDateObject(a) - occasionDateObject(b));
+}
+
+function normalizeOccasionDate(value) {
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const day = Number(raw.replace(/\D/g, ""));
+  const now = new Date();
+  const safeDay = Math.max(1, Math.min(28, day || now.getDate()));
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`;
+}
+
+function occasionDateObject(item) {
+  const parsed = new Date(`${normalizeOccasionDate(item.date)}T09:00:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function addDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function formatDateInput(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatOccasionDate(item) {
+  return occasionDateObject(item).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+}
+
+function formatReminderDate(item) {
+  return addDays(occasionDateObject(item), -7).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function persistOccasions() {
+  occasions = normalizeOccasions(occasions);
+  localStorage.setItem("uniqOccasions", JSON.stringify(occasions));
+}
+
+function rewardValue(points = rewardPoints) {
+  return Math.floor((Number(points) || 0) / 4);
+}
+
+function saveRewardPoints() {
+  localStorage.setItem("uniqRewardPoints", String(rewardPoints));
+}
+
+function referralCode() {
+  const seed = `${customerProfile.name || "uniq"}-${customerProfile.contact || "world"}`.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return `UWG-${(seed || "GIFT").slice(0, 6)}-${String(Math.abs(hashCode(seed))).slice(0, 4)}`;
+}
+
+function hashCode(value) {
+  return String(value).split("").reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0);
 }
 
 function productArt(image = "", label = "Gift image") {
@@ -316,6 +389,10 @@ function render() {
 
 function renderHome() {
   const spotlight = hampers.filter(item => item.published && item.stock > 0 && (item.tags || []).some(tag => ["hero", "new", "bestselling"].includes(tag))).slice(0, 6);
+  if (qs("#occasionDate") && !qs("#occasionDate").value) qs("#occasionDate").value = formatDateInput(addDays(new Date(), 7));
+  qs("#offerMarquee").innerHTML = `
+    <div>${offerMessages.concat(offerMessages).map(message => `<span>${escapeHtml(message)}</span>`).join("")}</div>
+  `;
   qs("#recommendations").innerHTML = defaultRecommendations.map(item => `
     <article class="product-card">
       ${productArt("", item.title)}
@@ -337,16 +414,23 @@ function renderHome() {
 
   qs("#occasionList").innerHTML = occasions.map(item => `
     <article class="occasion">
-      <span class="date-pill">${item.date}</span>
+      <span class="date-pill">${formatOccasionDate(item)}</span>
       <div>
-        <strong>${item.title}</strong>
-        <p class="muted">${item.detail}</p>
+        <strong>${escapeHtml(item.title)}</strong>
+        <p class="muted">${escapeHtml(item.detail)}</p>
+        <p class="muted">Reminder: ${formatReminderDate(item)}</p>
       </div>
-      <button class="icon-button" aria-label="Create gift for ${item.title}" data-nav="concierge">
+      <button class="icon-button" aria-label="Create gift for ${escapeHtml(item.title)}" data-nav="concierge">
         <i data-lucide="sparkles"></i>
       </button>
-      <button class="icon-button" aria-label="Edit ${item.title}" data-action="editOccasion" data-title="${escapeHtml(item.title)}">
+      <button class="icon-button" aria-label="Download reminder for ${escapeHtml(item.title)}" data-action="downloadOccasionReminder" data-id="${item.id}">
+        <i data-lucide="calendar-down"></i>
+      </button>
+      <button class="icon-button" aria-label="Edit ${escapeHtml(item.title)}" data-action="editOccasion" data-id="${item.id}">
         <i data-lucide="pencil"></i>
+      </button>
+      <button class="icon-button danger-icon" aria-label="Delete ${escapeHtml(item.title)}" data-action="deleteOccasion" data-id="${item.id}">
+        <i data-lucide="trash-2"></i>
       </button>
     </article>
   `).join("");
@@ -494,6 +578,8 @@ function renderAdmin() {
   renderAdminOrders();
   renderImagePreview();
   renderInventoryImagePreview();
+  const offers = qs("#offerMessages");
+  if (offers) offers.value = offerMessages.join("\n");
 }
 
 function renderAdminOrders() {
@@ -583,6 +669,11 @@ function renderProfile() {
       </div>
     </article>
   `).join("");
+  const progress = Math.min(100, Math.round((rewardPoints / 10000) * 100));
+  qs("#rewardProgress").style.width = `${progress}%`;
+  qs("#rewardPointsText").textContent = `${rewardPoints.toLocaleString("en-IN")} points available, worth up to ${money(rewardValue())}.`;
+  qs("#rewardMath").textContent = "Earn 1 point per Rs 100 spent. Redeem 4 points = Rs 1, capped at 10% of cart value or Rs 500 per order.";
+  qs("#referralCode").textContent = referralCode();
 }
 
 function renderMood() {
@@ -879,6 +970,7 @@ async function checkout() {
   if (!appConfig.checked) await hydrateConfig();
   const orderItems = structuredClone(cart);
   const orderMeta = { customer: customerProfile, delivery: deliveryProfile };
+  const orderTotal = checkoutTotals().payable;
   if (appConfig.payments?.enabled) {
     try {
       message.textContent = "Opening secure payment...";
@@ -909,7 +1001,7 @@ async function checkout() {
     if (response.ok) {
       const result = await response.json();
       if (result.state) applyState(result.state);
-      notifyAdminOrder({ id: result.order?.id || `order-${Date.now()}`, items: orderItems, ...orderMeta, total: checkoutTotals().payable, status: "Placed" });
+      notifyAdminOrder({ id: result.order?.id || `order-${Date.now()}`, items: orderItems, ...orderMeta, total: orderTotal, status: "Placed" });
       markPurchased(orderItems);
       selectedInventoryIds = [];
       saveState("uniqBuilderSelection", selectedInventoryIds);
@@ -940,7 +1032,7 @@ async function checkout() {
     }
   });
   cart = [];
-  notifyAdminOrder({ id: `local-${Date.now()}`, items: orderItems, ...orderMeta, total: checkoutTotals().payable, status: "Placed locally" });
+  notifyAdminOrder({ id: `local-${Date.now()}`, items: orderItems, ...orderMeta, total: orderTotal, status: "Placed locally" });
   markPurchased(orderItems);
   saveState("uniqHampers", hampers);
   saveState("uniqInventory", inventory);
@@ -955,6 +1047,7 @@ async function checkout() {
 }
 
 function openRazorpayCheckout(paymentOrder, orderItems, orderMeta = {}) {
+  const orderTotal = checkoutTotals().payable;
   return new Promise((resolve, reject) => {
     loadRazorpayScript().then(() => {
     const options = {
@@ -975,7 +1068,7 @@ function openRazorpayCheckout(paymentOrder, orderItems, orderMeta = {}) {
           const result = await verifyResponse.json();
           if (!verifyResponse.ok) throw new Error(result.error || "Payment verification failed.");
           if (result.state) applyState(result.state);
-          notifyAdminOrder({ id: result.order?.id || `paid-${Date.now()}`, items: orderItems, ...orderMeta, total: checkoutTotals().payable, status: "Paid" });
+          notifyAdminOrder({ id: result.order?.id || `paid-${Date.now()}`, items: orderItems, ...orderMeta, total: orderTotal, status: "Paid" });
           markPurchased(orderItems);
           selectedInventoryIds = [];
           saveState("uniqBuilderSelection", selectedInventoryIds);
@@ -1264,25 +1357,44 @@ function downloadFile(filename, content, type = "text/plain") {
   URL.revokeObjectURL(url);
 }
 
-function calendarDate(day) {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  return `${now.getFullYear()}${month}${String(day).padStart(2, "0")}`;
+function calendarDate(value, offsetDays = 0) {
+  return formatDateInput(addDays(occasionDateObject({ date: value }), offsetDays)).replace(/-/g, "");
 }
 
-function syncCalendar() {
-  const events = occasions.map(item => [
+function escapeIcs(value) {
+  return String(value || "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+}
+
+function occasionEvent(item, reminderOnly = false) {
+  const eventDate = reminderOnly ? calendarDate(item.date, -7) : calendarDate(item.date);
+  const title = reminderOnly ? `Gift reminder: ${item.title}` : item.title;
+  const detail = reminderOnly
+    ? `${item.detail}\n\nThis reminder is one week before ${item.title}.`
+    : item.detail;
+  return [
     "BEGIN:VEVENT",
-    `UID:uniq-world-${item.date}-${Date.now()}@uniqworld`,
+    `UID:uniq-world-${item.id}-${reminderOnly ? "reminder" : "occasion"}@uniqworld`,
     `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")}`,
-    `DTSTART;VALUE=DATE:${calendarDate(item.date)}`,
-    `SUMMARY:${item.title}`,
-    `DESCRIPTION:${item.detail}`,
+    `DTSTART;VALUE=DATE:${eventDate}`,
+    `SUMMARY:${escapeIcs(title)}`,
+    `DESCRIPTION:${escapeIcs(detail)}`,
     "END:VEVENT"
-  ].join("\r\n")).join("\r\n");
+  ].join("\r\n");
+}
+
+function syncCalendar(reminderOnly = true) {
+  const events = occasions.map(item => occasionEvent(item, reminderOnly)).join("\r\n");
   const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Uniq World//Gift Calendar//EN", events, "END:VCALENDAR"].join("\r\n");
-  downloadFile("uniq-world-gift-calendar.ics", ics, "text/calendar");
-  showToast("Calendar file downloaded. Open it to add reminders.");
+  downloadFile(reminderOnly ? "uniq-world-one-week-reminders.ics" : "uniq-world-gift-calendar.ics", ics, "text/calendar");
+  showToast("Reminder calendar downloaded. Import it into Google, Apple, or Outlook Calendar.");
+}
+
+function downloadOccasionReminder(id) {
+  const item = occasions.find(occasion => occasion.id === id);
+  if (!item) return;
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Uniq World//Gift Reminder//EN", occasionEvent(item, true), "END:VCALENDAR"].join("\r\n");
+  downloadFile(`${item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-reminder.ics`, ics, "text/calendar");
+  showToast("One-week-prior reminder downloaded.");
 }
 
 function openGoogleCalendar() {
@@ -1311,17 +1423,18 @@ function icsValue(block, field) {
 function parseIcsOccasions(text) {
   return unfoldIcs(text).split("BEGIN:VEVENT").slice(1).map(block => {
     const rawDate = icsValue(block, "DTSTART") || icsValue(block, "DTSTART;VALUE=DATE");
-    const day = rawDate.match(/\d{8}/)?.[0]?.slice(6, 8) || "--";
+    const dateToken = rawDate.match(/\d{8}/)?.[0] || "";
+    const date = dateToken ? `${dateToken.slice(0, 4)}-${dateToken.slice(4, 6)}-${dateToken.slice(6, 8)}` : formatDateInput(new Date());
     const title = icsValue(block, "SUMMARY") || "Calendar occasion";
     const detail = icsValue(block, "DESCRIPTION") || "Imported from online calendar.";
-    return { date: day, title, detail };
+    return { id: `occasion-${Date.now()}-${Math.random().toString(16).slice(2)}`, date, title, detail };
   }).filter(item => item.title);
 }
 
 function applyImportedOccasions(imported) {
   if (!imported.length) return showToast("No occasions found in that calendar.");
-  occasions = imported.slice(0, 20);
-  localStorage.setItem("uniqOccasions", JSON.stringify(occasions));
+  occasions = normalizeOccasions(imported.slice(0, 20));
+  persistOccasions();
   renderHome();
   lucide.createIcons();
   showToast(`${imported.length} occasion${imported.length === 1 ? "" : "s"} imported into the app.`);
@@ -1470,27 +1583,51 @@ function redeemRewards() {
     openCart();
     return;
   }
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const discount = Math.min(500, Math.round(subtotal * 0.1));
-  cart.push({ cartId: "reward:uniq-points", type: "reward", title: "Uniq Rewards Discount", price: -discount, qty: 1 });
+  const subtotal = cart.reduce((sum, item) => sum + (item.type === "reward" ? 0 : (item.individualTotal || item.price) * item.qty), 0);
+  const discount = Math.min(rewardValue(), 500, Math.round(subtotal * 0.1));
+  if (discount < 1) {
+    showToast("You need at least 4 points to redeem Rs 1.");
+    return;
+  }
+  const pointsUsed = discount * 4;
+  rewardPoints = Math.max(0, rewardPoints - pointsUsed);
+  saveRewardPoints();
+  cart.push({ cartId: "reward:uniq-points", type: "reward", title: "Uniq Rewards Discount", price: -discount, qty: 1, pointsUsed });
   persistCart();
+  renderProfile();
   openCart();
-  showToast(`${money(discount)} reward discount applied.`);
+  showToast(`${money(discount)} reward discount applied using ${pointsUsed} points.`);
 }
 
 function removeReward() {
+  const rewardLine = cart.find(item => item.type === "reward");
+  if (rewardLine?.pointsUsed) {
+    rewardPoints += Number(rewardLine.pointsUsed) || 0;
+    saveRewardPoints();
+  }
   cart = cart.filter(item => item.type !== "reward");
   persistCart();
+  renderProfile();
   showToast("Reward discount removed.");
 }
 
+function awardRewardPoints(amount) {
+  const earned = Math.floor((Number(amount) || 0) / 100);
+  if (!earned) return 0;
+  rewardPoints += earned;
+  saveRewardPoints();
+  renderProfile();
+  return earned;
+}
+
 function notifyAdminOrder(order) {
+  const earned = awardRewardPoints(order.total);
   adminOrders.unshift({ createdAt: new Date().toISOString(), ...order });
   adminOrders = adminOrders.slice(0, 50);
   localStorage.setItem("uniqAdminOrders", JSON.stringify(adminOrders));
   updateAdminOrders();
   if ("Notification" in window && Notification.permission === "granted") {
-    new Notification("New Uniq World order", { body: `${order.customer?.name || "Customer"} placed ${money(order.total)} order.` });
+    new Notification("New Uniq World order", { body: `${order.customer?.name || "Customer"} placed ${money(order.total)} order. ${earned} points earned.` });
   }
 }
 
@@ -1508,7 +1645,28 @@ function submitBulkInquiry(event) {
   bulkInquiries.unshift(inquiry);
   localStorage.setItem("uniqBulkInquiries", JSON.stringify(bulkInquiries));
   qs("#bulkStatus").textContent = "Inquiry saved. Admin can contact you using the details provided.";
+  fetch(`${API_BASE}/api/bulk-inquiries`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(inquiry)
+  }).catch(() => {});
   showToast("Bulk gifting inquiry sent.");
+}
+
+async function shareReferral() {
+  const code = referralCode();
+  const text = `Use my Uniq World referral code ${code} for Rs 100 off your first celebration hamper.`;
+  const url = `${location.origin}${location.pathname}?ref=${encodeURIComponent(code)}`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: "Uniq World referral", text, url });
+      return;
+    }
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    showToast("Referral copied. Share it anywhere.");
+  } catch {
+    showToast("Referral share cancelled.");
+  }
 }
 
 function downloadBulkTemplate() {
@@ -1578,19 +1736,58 @@ function scheduleOccasionReminders() {
   }, 2500);
 }
 
-function editOccasion(title) {
-  const index = occasions.findIndex(item => item.title === title);
-  if (index < 0) return;
-  const current = occasions[index];
-  const nextTitle = prompt("Occasion title", current.title);
-  if (!nextTitle) return;
-  const nextDate = prompt("Day of month", current.date) || current.date;
-  const nextDetail = prompt("Reminder details", current.detail) || current.detail;
-  occasions[index] = { date: nextDate.padStart(2, "0").slice(-2), title: nextTitle, detail: nextDetail };
-  localStorage.setItem("uniqOccasions", JSON.stringify(occasions));
+function saveOccasion(event) {
+  event.preventDefault();
+  const id = qs("#occasionId").value || `occasion-${Date.now()}`;
+  const payload = {
+    id,
+    date: qs("#occasionDate").value,
+    title: qs("#occasionTitle").value.trim(),
+    detail: qs("#occasionDetail").value.trim() || "Gift reminder saved in Uniq World."
+  };
+  const existing = occasions.find(item => item.id === id);
+  if (existing) Object.assign(existing, payload);
+  else occasions.push(payload);
+  persistOccasions();
+  clearOccasionForm();
   renderHome();
   lucide.createIcons();
-  showToast("Occasion updated.");
+  showToast("Occasion saved with a one-week-prior reminder.");
+}
+
+function clearOccasionForm() {
+  qs("#occasionForm").reset();
+  qs("#occasionId").value = "";
+  qs("#occasionDate").value = formatDateInput(addDays(new Date(), 7));
+}
+
+function editOccasion(id) {
+  const current = occasions.find(item => item.id === id);
+  if (!current) return;
+  qs("#occasionId").value = current.id;
+  qs("#occasionTitle").value = current.title;
+  qs("#occasionDate").value = normalizeOccasionDate(current.date);
+  qs("#occasionDetail").value = current.detail;
+  qs("#occasionTitle").focus();
+}
+
+function deleteOccasion(id) {
+  const current = occasions.find(item => item.id === id);
+  if (!current || !confirm(`Delete ${current.title}?`)) return;
+  occasions = occasions.filter(item => item.id !== id);
+  persistOccasions();
+  renderHome();
+  lucide.createIcons();
+  showToast("Occasion deleted.");
+}
+
+function saveOffers() {
+  const messages = qs("#offerMessages").value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  offerMessages = messages.length ? messages.slice(0, 8) : defaultOffers;
+  saveState("uniqOfferMessages", offerMessages);
+  renderHome();
+  lucide.createIcons();
+  showToast("Homepage offer banner updated.");
 }
 
 function markPurchased(lines) {
@@ -1710,9 +1907,14 @@ function wireEvents() {
       renderInventoryImagePreview();
     }
     if (action.dataset.action === "adminLogout") lockAdmin();
+    if (action.dataset.action === "saveOffers") saveOffers();
+    if (action.dataset.action === "calendarReminders") syncCalendar(true);
     if (action.dataset.action === "calendarUrl") importCalendarUrl();
     if (action.dataset.action === "calendarFile") qs("#calendarImport").click();
-    if (action.dataset.action === "editOccasion") editOccasion(action.dataset.title);
+    if (action.dataset.action === "editOccasion") editOccasion(id);
+    if (action.dataset.action === "deleteOccasion") deleteOccasion(id);
+    if (action.dataset.action === "downloadOccasionReminder") downloadOccasionReminder(id);
+    if (action.dataset.action === "clearOccasion") clearOccasionForm();
     if (action.dataset.action === "joinChallenge") joinChallenge();
     if (action.dataset.action === "enableNotifications") enableNotifications();
     if (action.dataset.action === "customerLogout") customerLogout();
@@ -1720,6 +1922,7 @@ function wireEvents() {
     if (action.dataset.action === "exportOrders") exportOrders();
     if (action.dataset.action === "redeemRewards") redeemRewards();
     if (action.dataset.action === "removeReward") removeReward();
+    if (action.dataset.action === "shareReferral") shareReferral();
     if (action.dataset.action === "shuffleMood") {
       moodIndex += 1;
       renderMood();
@@ -1728,6 +1931,7 @@ function wireEvents() {
 
   qs("#adminLogin").addEventListener("submit", unlockAdmin);
   qs("#customerForm").addEventListener("submit", saveCustomer);
+  qs("#occasionForm").addEventListener("submit", saveOccasion);
   qs("#bulkForm").addEventListener("submit", submitBulkInquiry);
   qs("#addressForm").addEventListener("input", captureDeliveryProfile);
   qs("#hamperEditor").addEventListener("submit", saveHamper);

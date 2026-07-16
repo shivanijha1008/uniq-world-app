@@ -10,6 +10,10 @@ const DATABASE_URL = process.env.DATABASE_URL || "";
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || "";
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "";
 const PAYMENT_CURRENCY = process.env.PAYMENT_CURRENCY || "INR";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
+const ADMIN_WHATSAPP_NUMBER = process.env.ADMIN_WHATSAPP_NUMBER || "";
+const ADMIN_EMAIL_WEBHOOK_URL = process.env.ADMIN_EMAIL_WEBHOOK_URL || "";
+const ADMIN_WHATSAPP_WEBHOOK_URL = process.env.ADMIN_WHATSAPP_WEBHOOK_URL || "";
 const sessions = new Set();
 const clients = new Set();
 const ROOT = __dirname;
@@ -32,7 +36,13 @@ const defaultDb = {
     { id: "green-tea-tin", name: "Green Tea Tin", description: "Calming loose-leaf tea in a keepsake tin.", category: "Tea", price: 520, stock: 30, published: true, image: "", variants: [{ name: "100g", price: 520, stock: 18 }, { name: "200g", price: 920, stock: 12 }] }
   ],
   cart: [],
-  orders: []
+  offers: [
+    "Free shipping above Rs 3,000",
+    "Rare finds sourced from international shops worldwide",
+    "Build your own hamper and save 10% on combo pricing"
+  ],
+  orders: [],
+  bulkInquiries: []
 };
 
 function optionalPg() {
@@ -203,6 +213,7 @@ async function handleApi(req, res) {
       storage: pgPool ? "postgres" : "json",
       storageError,
       payments: Boolean(RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET),
+      adminNotifications: Boolean(ADMIN_EMAIL_WEBHOOK_URL || ADMIN_WHATSAPP_WEBHOOK_URL),
       time: new Date().toISOString()
     });
   }
@@ -257,8 +268,8 @@ async function handleApi(req, res) {
 
   if (req.method === "PUT" && url.pathname.startsWith("/api/state/")) {
     const key = url.pathname.split("/").pop();
-    if (!["hampers", "inventory", "cart"].includes(key)) return sendJson(res, 400, { error: "Invalid state key" });
-    if (["hampers", "inventory"].includes(key) && !requireAdmin(req, res)) return;
+    if (!["hampers", "inventory", "cart", "offers"].includes(key)) return sendJson(res, 400, { error: "Invalid state key" });
+    if (["hampers", "inventory", "offers"].includes(key) && !requireAdmin(req, res)) return;
     const body = await readBody(req);
     db[key] = body.value;
     await writeDb(db);
@@ -275,13 +286,25 @@ async function handleApi(req, res) {
 
   if (req.method === "POST" && url.pathname === "/api/orders") {
     const body = await readBody(req);
-    const order = { id: `order-${Date.now()}`, createdAt: new Date().toISOString(), ...body };
+    const order = { id: `order-${Date.now()}`, createdAt: new Date().toISOString(), total: calculateOrderTotal(db, body.items || []), ...body };
     applyOrderStock(db, body.items || []);
     db.orders.unshift(order);
     db.cart = [];
     await persistOrder(order);
     await writeDb(db);
+    notifyAdmin("order_placed", order);
     return sendJson(res, 201, { ok: true, order, state: db });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/bulk-inquiries") {
+    const body = await readBody(req);
+    const inquiry = { id: body.id || `bulk-${Date.now()}`, createdAt: new Date().toISOString(), ...body };
+    db.bulkInquiries ||= [];
+    db.bulkInquiries.unshift(inquiry);
+    db.bulkInquiries = db.bulkInquiries.slice(0, 100);
+    await writeDb(db);
+    notifyAdmin("bulk_inquiry", inquiry);
+    return sendJson(res, 201, { ok: true, inquiry });
   }
 
   if (req.method === "POST" && url.pathname === "/api/payments/create-order") {
@@ -334,6 +357,7 @@ async function handleApi(req, res) {
       orderId: body.razorpay_order_id
     });
     await writeDb(db);
+    notifyAdmin("payment_received", order);
     return sendJson(res, 201, { ok: true, order, state: db });
   }
 
@@ -441,6 +465,51 @@ function fetchText(source) {
     req.setTimeout(15000, () => req.destroy(new Error("Calendar download timed out")));
     req.on("error", reject);
   });
+}
+
+function notifyAdmin(type, payload) {
+  const message = adminNotificationMessage(type, payload);
+  const basePayload = {
+    app: "Uniq World",
+    type,
+    message,
+    adminEmail: ADMIN_EMAIL,
+    adminWhatsapp: ADMIN_WHATSAPP_NUMBER,
+    payload
+  };
+  if (ADMIN_EMAIL_WEBHOOK_URL) postWebhook(ADMIN_EMAIL_WEBHOOK_URL, { channel: "email", ...basePayload });
+  if (ADMIN_WHATSAPP_WEBHOOK_URL) postWebhook(ADMIN_WHATSAPP_WEBHOOK_URL, { channel: "whatsapp", ...basePayload });
+}
+
+function adminNotificationMessage(type, payload) {
+  if (type === "bulk_inquiry") {
+    return `New bulk gifting inquiry from ${payload.company || "customer"} for ${payload.quantity || 0} hampers at Rs ${payload.budget || 0} each. Contact: ${payload.contact || "not provided"}.`;
+  }
+  const total = payload.total || payload.amount || calculateOrderTotal({ hampers: [], inventory: [] }, payload.items || []);
+  return `New Uniq World ${type === "payment_received" ? "paid order" : "order"} ${payload.id || ""} for Rs ${total}. Customer: ${payload.customer?.name || "Customer"}. Phone: ${payload.delivery?.phone || payload.customer?.contact || "not provided"}.`;
+}
+
+function postWebhook(targetUrl, payload) {
+  try {
+    const parsed = new URL(targetUrl);
+    const transport = parsed.protocol === "http:" ? http : https;
+    const body = JSON.stringify(payload);
+    const req = transport.request({
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === "http:" ? 80 : 443),
+      path: `${parsed.pathname}${parsed.search}`,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body)
+      }
+    }, response => response.resume());
+    req.setTimeout(8000, () => req.destroy());
+    req.on("error", error => console.warn(`Admin notification failed: ${error.message}`));
+    req.end(body);
+  } catch (error) {
+    console.warn(`Invalid admin notification webhook: ${error.message}`);
+  }
 }
 
 function verifyRazorpaySignature(orderId, paymentId, signature) {
