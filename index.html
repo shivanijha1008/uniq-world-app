@@ -16,6 +16,7 @@
             <i data-lucide="user-round"></i>
           </button>
           <div class="brand">
+            <img src="./assets/uwg-logo.png" alt="UWG Gifts and More logo" />
             <span>Uniq World</span>
             <small>Every Gift Tells Your Story</small>
           </div>
@@ -414,15 +415,35 @@
           <div class="vault-list" id="vaultList"></div>
           <section class="panel">
             <div class="section-title">
-              <h2>Corporate portal</h2>
-              <button data-action="corporateUpload">Upload CSV</button>
+              <h2>Bulk gifting</h2>
+              <button data-action="bulkTemplate">Template</button>
             </div>
-            <div class="admin-grid">
-              <span>GST billing</span>
-              <span>Bulk upload</span>
-              <span>Approval flows</span>
-              <span>Branded kits</span>
-            </div>
+            <form class="customer-form" id="bulkForm">
+              <label>
+                Company or event
+                <input id="bulkCompany" required placeholder="Company, wedding, festival, team event" />
+              </label>
+              <div class="form-row">
+                <label>
+                  Quantity
+                  <input id="bulkQuantity" type="number" min="5" step="1" value="25" />
+                </label>
+                <label>
+                  Budget per hamper
+                  <input id="bulkBudget" type="number" min="500" step="100" value="2500" />
+                </label>
+              </div>
+              <label>
+                Contact details
+                <input id="bulkContact" required placeholder="Email or phone" />
+              </label>
+              <label>
+                Requirements
+                <textarea id="bulkRequirements" placeholder="Theme, delivery city, branding, dietary preferences..."></textarea>
+              </label>
+              <button class="primary-button" type="submit"><i data-lucide="send"></i>Send inquiry</button>
+              <p class="muted" id="bulkStatus"></p>
+            </form>
           </section>
           <section class="panel">
             <div class="section-title">
@@ -468,6 +489,7 @@
               <span>Total</span>
               <strong id="cartTotal">Rs 0</strong>
             </div>
+            <div class="price-breakdown" id="priceBreakdown"></div>
             <button class="primary-button checkout-button" data-action="checkout">
               <i data-lucide="credit-card"></i>
               Place order

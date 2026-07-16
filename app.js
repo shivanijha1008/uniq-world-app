@@ -78,6 +78,8 @@ let customerProfile = loadState("uniqCustomerProfile", { name: "", contact: "" }
 let deliveryProfile = loadState("uniqDeliveryProfile", { name: "", phone: "", address: "" });
 let reviews = loadState("uniqReviews", {});
 let purchasedHamperIds = loadState("uniqPurchasedHampers", []);
+let adminOrders = loadState("uniqAdminOrders", []);
+let bulkInquiries = loadState("uniqBulkInquiries", []);
 let appConfig = { checked: false, payments: { enabled: false, keyId: "", currency: "INR" }, storage: "json" };
 let challengeJoined = localStorage.getItem("uniqChallengeJoined") === "true";
 
@@ -489,8 +491,38 @@ function renderAdmin() {
     ? "Admin unlocked. Manage inventory and ready hamper catalog."
     : "Login to manage inventory, hamper pictures, descriptions, and pricing.";
   renderInventoryAdminList();
+  renderAdminOrders();
   renderImagePreview();
   renderInventoryImagePreview();
+}
+
+function renderAdminOrders() {
+  const workspace = qs("#adminWorkspace");
+  if (!workspace || qs("#adminOrdersPanel")) return;
+  workspace.insertAdjacentHTML("afterbegin", `
+    <section class="panel" id="adminOrdersPanel">
+      <div class="section-title">
+        <h2>Order notifications</h2>
+        <button data-action="exportOrders">Export</button>
+      </div>
+      <div class="admin-order-list" id="adminOrderList"></div>
+      <p class="muted">Shipping mechanism: admin receives the order here, packs the hamper, books a courier manually, then updates tracking/status for the customer. Email/SMS automation can be connected later through SendGrid/Twilio/Shiprocket APIs.</p>
+    </section>
+  `);
+  updateAdminOrders();
+}
+
+function updateAdminOrders() {
+  const target = qs("#adminOrderList");
+  if (!target) return;
+  target.innerHTML = adminOrders.length ? adminOrders.map(order => `
+    <article class="admin-order">
+      <strong>${escapeHtml(order.id)}</strong>
+      <p>${escapeHtml(order.customer?.name || "Customer")} | ${escapeHtml(order.delivery?.phone || "")}</p>
+      <p>${escapeHtml(order.delivery?.address || "No address")}</p>
+      <span>${money(order.total)} | ${escapeHtml(order.status || "Placed")}</span>
+    </article>
+  `).join("") : `<section class="empty-state">New paid/placed orders will appear here for admin packing and shipping.</section>`;
 }
 
 function renderInventoryAdminList() {
@@ -570,7 +602,8 @@ function renderMood() {
 
 function renderCart() {
   const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
-  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const totals = checkoutTotals();
+  const cartTotal = totals.payable;
   const paymentLabel = appConfig.payments?.enabled ? "Pay securely" : "Place order";
   qs("#cartCount").textContent = cartCount;
   qs("#cartTotal").textContent = money(cartTotal);
@@ -596,6 +629,22 @@ function renderCart() {
     checkoutButton.innerHTML = `<i data-lucide="credit-card"></i>${paymentLabel}`;
     checkoutButton.disabled = !cart.length;
   }
+  qs("#priceBreakdown").innerHTML = cart.length ? `
+    <div><span>Items subtotal</span><strong>${money(totals.subtotal)}</strong></div>
+    <div><span>Combo savings</span><strong>-${money(totals.comboSavings)}</strong></div>
+    <div><span>Reward discount</span><strong>-${money(totals.rewardDiscount)}</strong></div>
+    <div><span>Shipping</span><strong>${totals.shipping ? money(totals.shipping) : "Free"}</strong></div>
+    <div class="payable"><span>Payable now</span><strong>${money(totals.payable)}</strong></div>
+  ` : "";
+}
+
+function checkoutTotals() {
+  const subtotal = cart.reduce((sum, item) => sum + (item.type === "reward" ? 0 : (item.individualTotal || item.price) * item.qty), 0);
+  const comboSavings = cart.reduce((sum, item) => sum + (item.type === "combo" ? Math.max(0, (item.individualTotal - item.price) * item.qty) : 0), 0);
+  const rewardDiscount = Math.abs(cart.filter(item => item.type === "reward").reduce((sum, item) => sum + item.price * item.qty, 0));
+  const merchandise = Math.max(0, subtotal - comboSavings - rewardDiscount);
+  const shipping = merchandise >= 3000 || merchandise === 0 ? 0 : 120;
+  return { subtotal, comboSavings, rewardDiscount, shipping, payable: merchandise + shipping };
 }
 
 function renderReviews(hamperId) {
@@ -860,6 +909,7 @@ async function checkout() {
     if (response.ok) {
       const result = await response.json();
       if (result.state) applyState(result.state);
+      notifyAdminOrder({ id: result.order?.id || `order-${Date.now()}`, items: orderItems, ...orderMeta, total: checkoutTotals().payable, status: "Placed" });
       markPurchased(orderItems);
       selectedInventoryIds = [];
       saveState("uniqBuilderSelection", selectedInventoryIds);
@@ -890,6 +940,7 @@ async function checkout() {
     }
   });
   cart = [];
+  notifyAdminOrder({ id: `local-${Date.now()}`, items: orderItems, ...orderMeta, total: checkoutTotals().payable, status: "Placed locally" });
   markPurchased(orderItems);
   saveState("uniqHampers", hampers);
   saveState("uniqInventory", inventory);
@@ -924,6 +975,7 @@ function openRazorpayCheckout(paymentOrder, orderItems, orderMeta = {}) {
           const result = await verifyResponse.json();
           if (!verifyResponse.ok) throw new Error(result.error || "Payment verification failed.");
           if (result.state) applyState(result.state);
+          notifyAdminOrder({ id: result.order?.id || `paid-${Date.now()}`, items: orderItems, ...orderMeta, total: checkoutTotals().payable, status: "Paid" });
           markPurchased(orderItems);
           selectedInventoryIds = [];
           saveState("uniqBuilderSelection", selectedInventoryIds);
@@ -1432,6 +1484,50 @@ function removeReward() {
   showToast("Reward discount removed.");
 }
 
+function notifyAdminOrder(order) {
+  adminOrders.unshift({ createdAt: new Date().toISOString(), ...order });
+  adminOrders = adminOrders.slice(0, 50);
+  localStorage.setItem("uniqAdminOrders", JSON.stringify(adminOrders));
+  updateAdminOrders();
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification("New Uniq World order", { body: `${order.customer?.name || "Customer"} placed ${money(order.total)} order.` });
+  }
+}
+
+function submitBulkInquiry(event) {
+  event.preventDefault();
+  const inquiry = {
+    id: `bulk-${Date.now()}`,
+    company: qs("#bulkCompany").value.trim(),
+    quantity: Number(qs("#bulkQuantity").value) || 0,
+    budget: Number(qs("#bulkBudget").value) || 0,
+    contact: qs("#bulkContact").value.trim(),
+    requirements: qs("#bulkRequirements").value.trim(),
+    createdAt: new Date().toISOString()
+  };
+  bulkInquiries.unshift(inquiry);
+  localStorage.setItem("uniqBulkInquiries", JSON.stringify(bulkInquiries));
+  qs("#bulkStatus").textContent = "Inquiry saved. Admin can contact you using the details provided.";
+  showToast("Bulk gifting inquiry sent.");
+}
+
+function downloadBulkTemplate() {
+  downloadFile("uniq-world-bulk-gifting-template.csv", "name,phone,address,occasion,budget,notes\nAarav Mehta,9999999999,Delhi,Diwali,2500,No nuts\n", "text/csv");
+}
+
+function exportOrders() {
+  const rows = ["id,status,total,customer,contact,address,createdAt", ...adminOrders.map(order => [
+    order.id,
+    order.status,
+    order.total,
+    order.customer?.name || "",
+    order.customer?.contact || order.delivery?.phone || "",
+    String(order.delivery?.address || "").replace(/,/g, " "),
+    order.createdAt
+  ].join(","))];
+  downloadFile("uniq-world-orders.csv", rows.join("\n"), "text/csv");
+}
+
 function saveCustomer(event) {
   event.preventDefault();
   customerProfile = {
@@ -1467,9 +1563,19 @@ async function enableNotifications() {
   renderProfile();
   if (permission === "granted") {
     new Notification("Uniq World reminders enabled", { body: "You will see occasion and order reminders on this device." });
+    scheduleOccasionReminders();
   } else {
     showToast("Notifications were not enabled.");
   }
+}
+
+function scheduleOccasionReminders() {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const next = occasions[0];
+  if (!next) return;
+  setTimeout(() => {
+    new Notification(`Gift reminder: ${next.title}`, { body: next.detail });
+  }, 2500);
 }
 
 function editOccasion(title) {
@@ -1610,7 +1716,8 @@ function wireEvents() {
     if (action.dataset.action === "joinChallenge") joinChallenge();
     if (action.dataset.action === "enableNotifications") enableNotifications();
     if (action.dataset.action === "customerLogout") customerLogout();
-    if (action.dataset.action === "corporateUpload") uploadCorporateCsv();
+    if (action.dataset.action === "bulkTemplate") downloadBulkTemplate();
+    if (action.dataset.action === "exportOrders") exportOrders();
     if (action.dataset.action === "redeemRewards") redeemRewards();
     if (action.dataset.action === "removeReward") removeReward();
     if (action.dataset.action === "shuffleMood") {
@@ -1621,6 +1728,7 @@ function wireEvents() {
 
   qs("#adminLogin").addEventListener("submit", unlockAdmin);
   qs("#customerForm").addEventListener("submit", saveCustomer);
+  qs("#bulkForm").addEventListener("submit", submitBulkInquiry);
   qs("#addressForm").addEventListener("input", captureDeliveryProfile);
   qs("#hamperEditor").addEventListener("submit", saveHamper);
   qs("#inventoryEditor").addEventListener("submit", saveInventory);
