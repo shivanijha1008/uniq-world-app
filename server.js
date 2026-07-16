@@ -17,6 +17,7 @@ const DATA_DIR = path.join(ROOT, "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
 let pgPool = null;
 let storageReady = false;
+let storageError = "";
 
 const defaultDb = {
   hampers: [
@@ -45,35 +46,44 @@ function optionalPg() {
 async function ensureDb() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   if (DATABASE_URL) {
-    const pg = optionalPg();
-    if (!pg) throw new Error("DATABASE_URL is set but the pg package is not installed. Run npm install.");
-    if (!pgPool) {
-      pgPool = new pg.Pool({
-        connectionString: DATABASE_URL,
-        ssl: process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false }
-      });
+    try {
+      const pg = optionalPg();
+      if (!pg) throw new Error("DATABASE_URL is set but the pg package is not installed. Run npm install.");
+      if (!pgPool) {
+        pgPool = new pg.Pool({
+          connectionString: DATABASE_URL,
+          ssl: process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false },
+          connectionTimeoutMillis: 5000,
+          idleTimeoutMillis: 10000
+        });
+      }
+      await pgPool.query(`
+        create table if not exists app_state (
+          id text primary key,
+          state jsonb not null,
+          updated_at timestamptz not null default now()
+        )
+      `);
+      await pgPool.query(`
+        create table if not exists orders (
+          id text primary key,
+          order_data jsonb not null,
+          payment_data jsonb,
+          created_at timestamptz not null default now()
+        )
+      `);
+      await pgPool.query(
+        "insert into app_state (id, state) values ($1, $2) on conflict (id) do nothing",
+        ["main", defaultDb]
+      );
+      storageError = "";
+      storageReady = true;
+      return;
+    } catch (error) {
+      storageError = error.message;
+      if (pgPool) await pgPool.end().catch(() => {});
+      pgPool = null;
     }
-    await pgPool.query(`
-      create table if not exists app_state (
-        id text primary key,
-        state jsonb not null,
-        updated_at timestamptz not null default now()
-      )
-    `);
-    await pgPool.query(`
-      create table if not exists orders (
-        id text primary key,
-        order_data jsonb not null,
-        payment_data jsonb,
-        created_at timestamptz not null default now()
-      )
-    `);
-    await pgPool.query(
-      "insert into app_state (id, state) values ($1, $2) on conflict (id) do nothing",
-      ["main", defaultDb]
-    );
-    storageReady = true;
-    return;
   }
   if (!fs.existsSync(DB_FILE)) {
     fs.writeFileSync(DB_FILE, JSON.stringify(defaultDb, null, 2));
@@ -93,13 +103,20 @@ async function readDb() {
 async function writeDb(db) {
   if (!storageReady) await ensureDb();
   if (pgPool) {
-    await pgPool.query(
-      "update app_state set state = $2, updated_at = now() where id = $1",
-      ["main", db]
-    );
-  } else {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+    try {
+      await pgPool.query(
+        "update app_state set state = $2, updated_at = now() where id = $1",
+        ["main", db]
+      );
+      broadcast({ type: "state-updated", at: new Date().toISOString() });
+      return;
+    } catch (error) {
+      storageError = error.message;
+      if (pgPool) await pgPool.end().catch(() => {});
+      pgPool = null;
+    }
   }
+  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
   broadcast({ type: "state-updated", at: new Date().toISOString() });
 }
 
@@ -178,13 +195,13 @@ function serveStatic(req, res) {
 
 async function handleApi(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  const db = await readDb();
 
   if (req.method === "GET" && url.pathname === "/api/health") {
     return sendJson(res, 200, {
       ok: true,
       service: "uniq-world",
       storage: pgPool ? "postgres" : "json",
+      storageError,
       payments: Boolean(RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET),
       time: new Date().toISOString()
     });
@@ -193,6 +210,7 @@ async function handleApi(req, res) {
   if (req.method === "GET" && url.pathname === "/api/config") {
     return sendJson(res, 200, {
       storage: pgPool ? "postgres" : "json",
+      storageError,
       payments: {
         provider: "razorpay",
         enabled: Boolean(RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET),
@@ -201,6 +219,8 @@ async function handleApi(req, res) {
       }
     });
   }
+
+  const db = await readDb();
 
   if (req.method === "GET" && url.pathname === "/api/events") {
     res.writeHead(200, {
@@ -373,12 +393,18 @@ function createRazorpayOrder(payload) {
       let body = "";
       response.on("data", chunk => { body += chunk; });
       response.on("end", () => {
-        const json = body ? JSON.parse(body) : {};
+        let json = {};
+        try {
+          json = body ? JSON.parse(body) : {};
+        } catch {
+          json = { error: { description: body || "Invalid Razorpay response" } };
+        }
         if (response.statusCode >= 200 && response.statusCode < 300) resolve(json);
         else reject(new Error(json.error?.description || "Razorpay order creation failed"));
       });
     });
     req.on("error", reject);
+    req.setTimeout(15000, () => req.destroy(new Error("Razorpay request timed out")));
     req.end(JSON.stringify(payload));
   });
 }

@@ -73,7 +73,7 @@ let cart = normalizeCart(loadState("uniqCart", []));
 let draftImage = "";
 let inventoryDraftImage = "";
 let selectedInventoryIds = loadState("uniqBuilderSelection", []);
-let appConfig = { payments: { enabled: false, keyId: "", currency: "INR" }, storage: "json" };
+let appConfig = { checked: false, payments: { enabled: false, keyId: "", currency: "INR" }, storage: "json" };
 let challengeJoined = localStorage.getItem("uniqChallengeJoined") === "true";
 
 function qs(selector, root = document) {
@@ -146,7 +146,7 @@ async function hydrateFromApi() {
 async function hydrateConfig() {
   try {
     const response = await fetch(`${API_BASE}/api/config`, { cache: "no-store" });
-    if (response.ok) appConfig = await response.json();
+    if (response.ok) appConfig = { checked: true, ...(await response.json()) };
     renderCart();
     lucide.createIcons();
   } catch {
@@ -685,6 +685,7 @@ async function checkout() {
     message.textContent = "Add at least one item before placing an order.";
     return;
   }
+  if (!appConfig.checked) await hydrateConfig();
   const orderItems = structuredClone(cart);
   if (appConfig.payments?.enabled) {
     try {
@@ -702,6 +703,10 @@ async function checkout() {
       message.textContent = error.message || "Payment could not be completed.";
       return;
     }
+  }
+  if (appConfig.checked && !appConfig.payments?.enabled) {
+    message.textContent = "Payment gateway is not configured on the server. Add Razorpay keys in Render environment variables.";
+    return;
   }
   try {
     const response = await fetch(`${API_BASE}/api/orders`, {
@@ -755,10 +760,7 @@ async function checkout() {
 
 function openRazorpayCheckout(paymentOrder, orderItems) {
   return new Promise((resolve, reject) => {
-    if (!window.Razorpay) {
-      reject(new Error("Razorpay checkout did not load. Check your internet connection."));
-      return;
-    }
+    loadRazorpayScript().then(() => {
     const options = {
       key: paymentOrder.keyId,
       amount: paymentOrder.order.amount,
@@ -794,6 +796,26 @@ function openRazorpayCheckout(paymentOrder, orderItems) {
       }
     };
     new window.Razorpay(options).open();
+    }).catch(() => reject(new Error("Razorpay checkout did not load. Check your internet connection.")));
+  });
+}
+
+function loadRazorpayScript() {
+  if (window.Razorpay) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector("script[data-razorpay]");
+    if (existing) {
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", reject, { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.dataset.razorpay = "true";
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
   });
 }
 
