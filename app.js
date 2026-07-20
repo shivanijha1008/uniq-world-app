@@ -57,12 +57,34 @@ const defaultHampers = [
 ];
 
 const defaultInventory = [
-  { id: "belgian-chocolate", name: "Belgian Chocolate Box", description: "Assorted premium chocolates for celebration hampers.", category: "Chocolate", price: 650, stock: 24, published: true, image: "" },
-  { id: "jasmine-candle", name: "Jasmine Soy Candle", description: "Warm floral candle with reusable glass jar.", category: "Candle", price: 850, stock: 18, published: true, image: "" },
-  { id: "green-tea-tin", name: "Green Tea Tin", description: "Calming loose-leaf tea in a keepsake tin.", category: "Tea", price: 520, stock: 30, published: true, image: "" },
-  { id: "silk-scrunchie", name: "Silk Scrunchie Set", description: "Soft pastel accessory set for self-care gifts.", category: "Lifestyle", price: 480, stock: 16, published: true, image: "" },
-  { id: "gratitude-journal", name: "Gratitude Journal", description: "Guided journal with premium paper and gold details.", category: "Stationery", price: 720, stock: 14, published: true, image: "" },
-  { id: "rose-face-mist", name: "Rose Face Mist", description: "Refreshing beauty add-on for wellness hampers.", category: "Beauty", price: 690, stock: 12, published: true, image: "" }
+  { id: "diya-with-candle", name: "Diya with Candle", description: "Decorative festive diya with candle for gifting. Price to be updated before publishing.", category: "Candle", price: 0, stock: 1, published: false, image: "", variants: [{ name: "Default", price: 0, stock: 1 }] },
+  { id: "blue-forest-boxes", name: "Blue forest boxes", description: "Premium blue gift box for hampers.", category: "Lifestyle", price: 210, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 210, stock: 1 }] },
+  { id: "khulad-terracotta", name: "Khulad terracotta", description: "Traditional terracotta kulhad. Price to be updated before publishing.", category: "Lifestyle", price: 0, stock: 1, published: false, image: "", variants: [{ name: "Default", price: 0, stock: 1 }] },
+  { id: "designer-khulad-ceramic", name: "Designer Khulad Ceramic", description: "Designer ceramic kulhad for tea/coffee.", category: "Tea", price: 100, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 100, stock: 1 }] },
+  { id: "brass-glass", name: "Brass glass", description: "Traditional brass drinking glass.", category: "Lifestyle", price: 230, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 230, stock: 1 }] },
+  { id: "1-l-steel-water-bottle", name: "1 L steel water bottle", description: "Stainless steel 1L reusable bottle.", category: "Lifestyle", price: 200, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 200, stock: 1 }] },
+  { id: "laxmi-pair", name: "Laxmi Pair", description: "Decorative Laxmi pair festive decor. Price to be updated before publishing.", category: "Lifestyle", price: 0, stock: 1, published: false, image: "", variants: [{ name: "Default", price: 0, stock: 1 }] },
+  { id: "marigold-mala", name: "Marigold Mala", description: "Artificial marigold garland decoration. Price to be updated before publishing.", category: "Lifestyle", price: 0, stock: 1, published: false, image: "", variants: [{ name: "Default", price: 0, stock: 1 }] },
+  { id: "paper-bags", name: "Paper Bags", description: "Premium paper carry bag.", category: "Lifestyle", price: 200, stock: 1, published: false, image: "", variants: [{ name: "Default", price: 200, stock: 1 }] },
+  { id: "jute-bags-white-medium-with-lace-window", name: "Jute Bags (white, medium with lace & window)", description: "Reusable jute hamper bag with lace and display window.", category: "Lifestyle", price: 60, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 60, stock: 1 }] },
+  { id: "lotus-shubh-labh", name: "Lotus Shubh Labh", description: "Lotus-themed Shubh Labh decor. Price to be updated before publishing.", category: "Lifestyle", price: 0, stock: 1, published: false, image: "", variants: [{ name: "Default", price: 0, stock: 1 }] },
+  { id: "pichwai-shubh-labh", name: "Pichwai Shubh Labh", description: "Pichwai-inspired Shubh Labh decor.", category: "Lifestyle", price: 100, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 100, stock: 1 }] },
+  { id: "paper-boat-chikki", name: "Paper Boat Chikki", description: "Crunchy chikki snack. Price to be updated before publishing.", category: "Chocolate", price: 0, stock: 1, published: false, image: "", variants: [{ name: "Default", price: 0, stock: 1 }] },
+  { id: "coffee-id", name: "Coffee ID", description: "Premium coffee sachet. Price to be updated before publishing.", category: "Tea", price: 0, stock: 1, published: false, image: "", variants: [{ name: "Default", price: 0, stock: 1 }] },
+  { id: "tea-bags", name: "Tea Bags", description: "Premium tea bags. Price to be updated before publishing.", category: "Tea", price: 0, stock: 1, published: false, image: "", variants: [{ name: "Default", price: 0, stock: 1 }] },
+  { id: "golden-lid-jars-medium", name: "Golden lid jars (medium)", description: "Medium storage jar with golden lid.", category: "Lifestyle", price: 16, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 16, stock: 1 }] },
+  { id: "copper-bronze-gold-lid-big-jar", name: "Copper/Bronze/Gold lid big jar", description: "Large storage jar with metallic lid.", category: "Lifestyle", price: 15, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 15, stock: 1 }] },
+  { id: "transparent-plastic-jars", name: "Transparent plastic jars", description: "Clear storage jar.", category: "Lifestyle", price: 15, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 15, stock: 1 }] },
+  { id: "mini-glass-jars", name: "Mini glass jars", description: "Mini glass storage jar.", category: "Lifestyle", price: 10, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 10, stock: 1 }] },
+  { id: "small-glass-candy-jars", name: "Small glass candy jars", description: "Small candy jar.", category: "Lifestyle", price: 50, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 50, stock: 1 }] },
+  { id: "big-glass-candy-jars", name: "Big glass candy jars", description: "Large candy jar. Price to be updated before publishing.", category: "Lifestyle", price: 0, stock: 1, published: false, image: "", variants: [{ name: "Default", price: 0, stock: 1 }] },
+  { id: "eco-friendly-kulhad", name: "Eco friendly kulhad", description: "Eco-friendly disposable kulhad.", category: "Tea", price: 33, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 33, stock: 1 }] },
+  { id: "green-sipper-bottle", name: "Green sipper bottle", description: "Green reusable sipper bottle.", category: "Lifestyle", price: 100, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 100, stock: 1 }] },
+  { id: "brown-sipper-bottle", name: "Brown sipper bottle", description: "Brown reusable sipper bottle.", category: "Lifestyle", price: 60, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 60, stock: 1 }] },
+  { id: "decorative-round-bowl-plate", name: "Decorative round bowl/plate", description: "Decorative serving bowl/plate.", category: "Lifestyle", price: 200, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 200, stock: 1 }] },
+  { id: "copper-glass", name: "Copper glass", description: "Premium copper drinking glass.", category: "Lifestyle", price: 170, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 170, stock: 1 }] },
+  { id: "eco-friendly-coffee-mug", name: "Eco friendly coffee mug", description: "Eco-friendly coffee mug. Price to be updated before publishing.", category: "Tea", price: 0, stock: 1, published: false, image: "", variants: [{ name: "Default", price: 0, stock: 1 }] },
+  { id: "mini-potli", name: "Mini potli", description: "Mini decorative potli pouch.", category: "Lifestyle", price: 5, stock: 1, published: true, image: "", variants: [{ name: "Default", price: 5, stock: 1 }] }
 ];
 
 let activeFilter = "All";
@@ -1463,20 +1485,24 @@ function importCalendarFile(event) {
 }
 
 function parseInventoryRow(row, index) {
-  const name = row.name || row.Name || row.product || row.Product || row.title || row.Title || "";
+  const name = row.name || row.Name || row.product || row.Product || row["Product Name"] || row.title || row.Title || "";
   if (!name) return null;
-  const price = Number(row.price || row.Price || row["Individual price"] || row.individualPrice || 0);
-  const stock = Number(row.stock || row.Stock || row.quantity || row.Quantity || 0);
+  const price = Number(row.price || row.Price || row["Individual price"] || row["Individual Price"] || row.individualPrice || 0);
+  const stock = Number(row.stock || row.Stock || row.quantity || row.Quantity || row["Default Quantity"] || 0);
   const variantsText = row.variants || row.Variants || "";
+  const availability = String(row.published || row.Published || row["Available for Custom Hamper"] || "true").toLowerCase();
+  const baseDescription = String(row.description || row.Description || "Imported inventory item").trim();
   const payload = {
     id: String(row.id || row.ID || name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `inventory-${Date.now()}-${index}`,
     name: String(name).trim(),
-    description: String(row.description || row.Description || "Imported inventory item").trim(),
+    description: price > 0 || baseDescription.includes("Price to be updated")
+      ? baseDescription
+      : `${baseDescription} Price to be updated before publishing.`,
     category: String(row.category || row.Category || "Lifestyle").trim(),
     price,
     stock,
-    published: String(row.published || row.Published || "true").toLowerCase() !== "false",
-    image: ""
+    published: price > 0 && !["false", "no", "draft", "hidden"].includes(availability),
+    image: String(row.image || row.Image || row["Product Picture"] || "")
   };
   payload.variants = variantsText
     ? parseVariants(String(variantsText), price, stock)
